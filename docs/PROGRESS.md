@@ -11,13 +11,16 @@ Status of what is verified (by a passing automated test or an executed command) 
 - Phase 2: Zod UserProfile schemas with provenance, options page CRUD for all sections, JSON import/export with visible validation errors, persistence.
   - Unit: `tests/unit/profile.test.ts`.
   - E2E: `tests/e2e/profile.spec.ts` (full CRUD, restart persistence with a persistent context, autofill reads the saved profile, visible validation errors, import/export).
+- Phase 3: deterministic autofill (observer, label resolution, alias dictionary, mapper, constrained executor, native-setter filling, verification, honest completion report). No AI, no network.
+  - Unit: `tests/unit/autofill.test.ts` (label priority, aliases, mapping, executor validation, React-tracker regression, verification, report).
+  - E2E: `tests/e2e/autofill.spec.ts` against 7 synthetic portals (basic, unusual labels, duplicate labels, React-controlled, required/optional, sensitive eligibility, adversarial text) incl. no-network, submit-never-clicked, idempotency.
 
 ## Partial
 - (none yet)
 
 ## Not started
 - Phases 4-11 (AI field understanding, job intelligence, answer generation, resume tailoring, adapters, multi-step/recovery, companion, hardening).
-- SPEC 25.2 synthetic forms not built this session (11 of 18): custom dropdowns, autocomplete, dynamic conditional fields, multi-step application, validation errors, resume upload, cross-origin iframe, missing personal information, field disabled during execution, DOM changes after every step, same label in several sections (the "duplicate labels" portal covers part of this).
+- SPEC 25.2 synthetic forms not built this session (11 of 18; the 7 built are in `tests/synthetic-portals/`): custom dropdowns, autocomplete, dynamic conditional fields, multi-step application, validation errors, resume upload, cross-origin iframe, missing personal information, field disabled during execution, DOM changes after every step, same label in several sections (the "duplicate labels" portal covers part of this).
 
 ## Known limitations
 - Cross-origin iframes, closed shadow roots and custom (non-native) dropdowns/autocompletes are not handled yet.

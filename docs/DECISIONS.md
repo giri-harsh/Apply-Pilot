@@ -18,3 +18,18 @@ One line each: decision | reason | alternatives rejected.
 - "Current employer/title" only comes from an experience record explicitly flagged `current`; never inferred from a missing end date. | SPEC 6.2 (never silently infer). | Inference.
 - Phase 3 never fills: sensitive/eligibility (visa, sponsorship, work authorization, disability, veteran, race, gender, criminal history, salary, DOB, age, relocation), consent checkboxes, third-party (reference/emergency) sections, files, password fields, hidden fields. | Brief hard rules + SPEC 14.5/17.2. | Fill preference values.
 - Commits are made at verification points per phase; source for later phases was authored while Phase 1 was being built, so a phase commit can contain code whose own tests land in the next verified step. PROGRESS.md states what was verified. | Practical sequencing. | n/a
+
+## Phases 1-3 (as built)
+- Pinned TypeScript 6.0.x. | typescript-eslint rejects TS 7.0 (native port); 6.x passes typecheck, lint and build. | Dropping lint.
+- Identifiers like `q_17`/`f3`/`x4` are not used as label evidence; trailing digits are stripped and names under 3 chars ignored. | Generated names add noise and false conflicts. | Using raw name attributes.
+- Evidence from nearby text alone gets confidence 0.6 (< 0.8 fill threshold), so such fields stay unresolved. | SPEC 17.2: low-confidence interpretation is left unresolved. Phase 4 (AI) is the intended path for these. | Filling on nearby text.
+- A "Start date" label is not an alias for availability. | It is equally an education/employment start date; guessing would be wrong. | Aliasing it.
+- Fields with the same semantic type, label and section are ambiguous and skipped; "Confirm email" style labels differ and are filled. | Cannot know which duplicate is meant. | Fill the first.
+- Fields inside Reference/Emergency/etc. sections are `third_party_contact` and never filled. | They are not the applicant's data. | Fill by label alone.
+- Hidden (display:none / off-screen) controls are never touched and not counted in totals. | Honeypots; user cannot see them. | Filling them.
+- Existing non-empty values are never overwritten (reported unresolved, or already_correct when equal). | Avoid destroying user input. | Overwrite.
+- Report definitions: filled = executed without error; verified = re-read value matches and no validation message; failed = planned but not verified. | Honest counts (SPEC 18.4). | Counting attempts as success.
+- Resumed runs re-observe, so a resumed run's report shows earlier fills as `alreadyCorrect`. | SPEC 15.3 forbids replay. | Persisting per-action logs (later phase).
+- e2e uses `channel: "chromium"` with headless true; works here (new headless supports extensions). | Brief failure case 7. | headed mode.
+- Service worker termination in e2e is done through DevTools (`ServiceWorker.stopWorker`) rather than `chrome.runtime.reload()`. | Reload killed the Playwright context. | Reload.
+- Phase 3 tests found and fixed: cancelled runs still sent one more page request (now every page call re-checks run state).

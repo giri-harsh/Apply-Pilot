@@ -7,8 +7,8 @@ const GENERIC_NAME = /^(field|input|q|question|text|txt|fld|f|el|id|ctrl|control
 
 /** "first_name" / "firstName" / "applicant-email" -> "first name" ... or "" if it carries no words. */
 export function humanizeIdentifier(raw: string): string {
-  const s = raw.trim();
-  if (!s || GENERIC_NAME.test(s) || /^[0-9a-f-]{16,}$/i.test(s)) return "";
+  const s = raw.trim().replace(/[-_.\s]*\d+$/, "");
+  if (s.length < 3 || GENERIC_NAME.test(s) || /^[0-9a-f-]{16,}$/i.test(s)) return "";
   return s
     .replace(/\[(\d+)\]/g, " ")
     .replace(/([a-z])([A-Z])/g, "$1 $2")

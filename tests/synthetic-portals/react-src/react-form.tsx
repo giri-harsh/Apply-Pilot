@@ -11,7 +11,7 @@ function App() {
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("");
   const [touchedEmail, setTouchedEmail] = useState(false);
-  const emailError = touchedEmail && email !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? "Enter a valid email" : "";
+  const emailError = touchedEmail && email !== "" && !/^[^\s@]+@[^\s@]+\.[a-z]{3,}$/.test(email) ? "Enter a valid email" : "";
 
   return (
     <form id="app" noValidate onSubmit={(e) => e.preventDefault()}>

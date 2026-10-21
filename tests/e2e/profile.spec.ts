@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import fs from "node:fs";
 import { freshUserDataDir, launchExtension, portalUrl, quickApply, waitForState, type Ext } from "./support/extension";
 import { testProfile } from "../fixtures/profile";
+import type { UserProfile } from "../../src/shared/profile";
 
 const optionsUrl = (e: Ext) => `chrome-extension://${e.extensionId}/options.html`;
 
@@ -14,8 +15,8 @@ async function tab(page: Page, name: string) {
 async function save(page: Page) {
   await page.getByTestId("save").click();
 }
-async function storedProfile(page: Page) {
-  return page.evaluate(async () => (await chrome.storage.local.get("applypilot.profile.v1"))["applypilot.profile.v1"]);
+async function storedProfile(page: Page): Promise<UserProfile | undefined> {
+  return (await page.evaluate(async () => (await chrome.storage.local.get("applypilot.profile.v1"))["applypilot.profile.v1"])) as UserProfile | undefined;
 }
 
 test.describe("Phase 2: profile vault", () => {
@@ -87,14 +88,14 @@ test.describe("Phase 2: profile vault", () => {
     await page.goto(optionsUrl(ext));
 
     await expect(page.locator('[name="personal.email"]')).toHaveValue("priya@example.test");
-    const stored = await storedProfile(page);
+    const stored = (await storedProfile(page))!;
     expect(stored.personal.fullName).toBe("Priya Sharma");
-    expect(stored.personal.provenance.email.source).toBe("user_entered");
-    expect(stored.education[0].institution).toBe("Mumbai Institute");
+    expect(stored.personal.provenance.email?.source).toBe("user_entered");
+    expect(stored.education[0]?.institution).toBe("Mumbai Institute");
     expect(stored.skills.map((s: { name: string }) => s.name)).toEqual(["Python 3"]);
-    expect(stored.projects[0].metrics).toEqual([{ text: "Parsed 500 resumes", source: "own benchmark, README" }]);
+    expect(stored.projects[0]?.metrics).toEqual([{ text: "Parsed 500 resumes", source: "own benchmark, README" }]);
     expect(stored.experience[0]).toMatchObject({ employer: "Acme Labs", current: true });
-    expect(stored.certifications[0].title).toBe("Deep Learning Specialization");
+    expect(stored.certifications[0]?.title).toBe("Deep Learning Specialization");
     expect(stored.preferences.workArrangement).toBe("hybrid");
     await tab(page, "Education");
     await expect(page.locator('[name="education.0.degree"]')).toHaveValue("Bachelor of Technology");
@@ -149,7 +150,7 @@ test.describe("Phase 2: profile vault", () => {
 
     await page.setInputFiles("#import-file", { name: "good.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(testProfile())) });
     await expect(page.getByTestId("message")).toHaveText("Imported and saved");
-    expect((await storedProfile(page)).personal.fullName).toBe("Alex Example");
+    expect((await storedProfile(page))!.personal.fullName).toBe("Alex Example");
 
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export JSON" }).click()]);
     const exported = JSON.parse(fs.readFileSync((await download.path())!, "utf8"));
