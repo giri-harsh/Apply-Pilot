@@ -24,8 +24,7 @@ export function selectCandidates(fields: FormField[], skipped: FieldResult[], ma
   for (const f of fields) {
     if (!unresolvedIds.has(f.fieldId)) continue;
     if (!f.visible || !f.enabled) continue;
-    if (f.widget !== "native") continue; // typing cannot select from a custom list
-    if (f.control !== "text" && f.control !== "select" && f.control !== "textarea") continue;
+    if (f.control !== "text" && f.control !== "select" && f.control !== "textarea" && f.control !== "combobox") continue;
     if (NEVER_TO_AI.includes(f.semanticType)) continue;
     if (f.risk === "high" || f.risk === "restricted") continue;
     if (f.control !== "select" && f.currentValue.trim() !== "") continue;

@@ -336,25 +336,6 @@ test.describe("Phase 4: universal field understanding (HTTP mocked)", () => {
     expect(report.results.filter((r) => r.outcome === "skipped_third_party")).toHaveLength(4);
   });
 
-  test("custom dropdowns: native fields still fill; the custom controls are left untouched until Phase 4b", async () => {
-    const { page, report } = await runPortal(ext, "custom-dropdowns");
-    await expect(page.locator("#n")).toHaveValue("Alex Example");
-    await expect(page.locator("#ctry")).toHaveText("Select...");
-    await expect(page.locator("#deg")).toHaveText("Choose a degree");
-    expect(report.filled).toBe(1);
-  });
-
-  test("autocomplete: plain typing is not mistaken for a selection (left untouched until Phase 4b)", async () => {
-    const { page, report } = await runPortal(ext, "autocomplete");
-    await expect(page.locator("#n")).toHaveValue("Alex Example");
-    expect(report.filled).toBeGreaterThanOrEqual(1);
-    // Whatever the engine does with the combobox inputs, it must never claim a selection that the page does not hold.
-    const hidden = await page.locator("#uni-id").inputValue();
-    for (const r of report.results.filter((x) => x.semanticType === "institution" && x.outcome === "filled_verified")) {
-      expect(hidden, `verified ${r.label} must correspond to a real selection`).not.toBe("");
-    }
-  });
-
   test("dynamic conditional fields: hidden ones are not touched; ones revealed mid-run are reported as not handled yet", async () => {
     const { page, report } = await runPortal(ext, "dynamic-conditional");
     await expect(page.locator("#country")).toHaveValue("IN");

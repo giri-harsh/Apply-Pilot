@@ -23,7 +23,7 @@ export function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement | HTML
   setter.call(el, value);
 }
 
-function fire(el: Element, type: string, init: EventInit = {}): void {
+export function fire(el: Element, type: string, init: EventInit = {}): void {
   const w = viewOf(el);
   const Ev = type === "input" ? w.InputEvent : w.Event;
   el.dispatchEvent(new Ev(type, { bubbles: true, cancelable: false, ...init }));

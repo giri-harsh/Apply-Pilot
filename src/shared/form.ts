@@ -103,7 +103,7 @@ export const LABEL_SOURCES = [
 ] as const;
 export type LabelSource = (typeof LABEL_SOURCES)[number];
 
-export const ControlKind = z.enum(["text", "textarea", "select", "radio", "checkbox", "file"]);
+export const ControlKind = z.enum(["text", "textarea", "select", "radio", "checkbox", "file", "combobox"]);
 export type ControlKind = z.infer<typeof ControlKind>;
 
 export const Risk = z.enum(["low", "moderate", "high", "restricted"]);
@@ -152,6 +152,9 @@ export const AgentActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("select_option"), fieldId: z.string(), optionValue: z.string().max(500) }),
   z.object({ type: z.literal("set_checkbox"), fieldId: z.string(), checked: z.boolean() }),
   z.object({ type: z.literal("select_radio"), fieldId: z.string(), optionValue: z.string().max(500) }),
+  // Custom widgets (SPEC 12.3 / 12.4): open, observe the real options, pick by label, then verify.
+  z.object({ type: z.literal("select_custom_option"), fieldId: z.string(), optionLabel: z.string().max(300) }),
+  z.object({ type: z.literal("fill_autocomplete"), fieldId: z.string(), query: z.string().max(300), optionLabel: z.string().max(300) }),
   z.object({ type: z.literal("upload_file"), fieldId: z.string(), fileReference: z.string() }),
   z.object({ type: z.literal("inspect_again") }),
   z.object({ type: z.literal("navigate_next") }),
@@ -160,7 +163,7 @@ export const AgentActionSchema = z.discriminatedUnion("type", [
 export type AgentAction = z.infer<typeof AgentActionSchema>;
 
 /** Action types the Phase 3 executor is willing to run. */
-export const EXECUTABLE_ACTIONS = ["fill_text", "select_option", "select_radio", "set_checkbox"] as const;
+export const EXECUTABLE_ACTIONS = ["fill_text", "select_option", "select_radio", "set_checkbox", "select_custom_option", "fill_autocomplete"] as const;
 
 export const FieldOutcome = z.enum([
   "filled_verified",

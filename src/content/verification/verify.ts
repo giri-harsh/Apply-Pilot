@@ -2,6 +2,7 @@ import type { FormField } from "@/shared/form";
 import type { PlannedFill, VerificationResult } from "@/shared/messages";
 import { isVisible, normalizeText } from "../observer/dom";
 import { settle } from "../actions/native";
+import { displayedValue, isExpanded, listboxFor, optionElements } from "../observer/widgets";
 
 const ERROR_CLASS = /\b(error|invalid|danger|alert|help-block|field-error|validation)\b/i;
 
@@ -26,9 +27,12 @@ export function findValidationMessage(el: HTMLElement): string | null {
       return normalizeText(n.textContent);
     }
   }
-  const sib = el.nextElementSibling ?? el.parentElement?.nextElementSibling ?? null;
-  if (sib && isVisible(sib) && ERROR_CLASS.test(sib.className) && normalizeText(sib.textContent)) {
-    return normalizeText(sib.textContent);
+  // Look at the next few siblings (a popup list or hint may sit between a control and its error text).
+  let sib: Element | null = el.nextElementSibling ?? el.parentElement?.nextElementSibling ?? null;
+  for (let i = 0; i < 3 && sib; i++, sib = sib.nextElementSibling) {
+    // Stop at the next control: any text beyond it belongs to that control, not this one.
+    if (sib.matches("input,select,textarea,label,button,fieldset") || sib.querySelector("input,select,textarea")) break;
+    if (isVisible(sib) && ERROR_CLASS.test(sib.className) && normalizeText(sib.textContent)) return normalizeText(sib.textContent);
   }
   return null;
 }
@@ -64,6 +68,16 @@ export async function verifyFill(
       case "set_checkbox":
         matches = (el as HTMLInputElement).checked === a.checked;
         break;
+      case "select_custom_option":
+        // Verify the displayed selection, not a hidden input (SPEC 18.1), and that the list is closed.
+        matches = displayedValue(el).toLowerCase() === a.optionLabel.trim().toLowerCase() && !isExpanded(el);
+        break;
+      case "fill_autocomplete":
+        matches =
+          displayedValue(el).toLowerCase() === a.optionLabel.trim().toLowerCase() &&
+          !isExpanded(el) &&
+          optionElements(listboxFor(el), true).length === 0;
+        break;
       default:
         return { fieldId, verified: false, reason: "Nothing to verify" };
     }
@@ -71,6 +85,11 @@ export async function verifyFill(
     await settle(25); // allow a controlled component to finish re-rendering before declaring a mismatch
   }
   if (!matches) return { fieldId, verified: false, reason: "Rendered value does not match what was entered" };
+  if (a.type === "fill_autocomplete") {
+    // Autocompletes often validate on blur ("choose one of the suggestions"); give that a moment to appear.
+    el.blur();
+    await settle(350);
+  }
   const msg = findValidationMessage(el);
   if (msg) return { fieldId, verified: false, reason: `Validation message: ${msg}`.slice(0, 280) };
   return { fieldId, verified: true, reason: "Rendered value matches and no validation error is shown" };

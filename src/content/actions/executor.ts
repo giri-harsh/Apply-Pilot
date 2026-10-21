@@ -8,6 +8,7 @@ import {
 import type { ExecutionResult } from "@/shared/messages";
 import { fingerprintOf } from "../observer/observe";
 import { isEnabled, isReadOnly, isVisible } from "../observer/dom";
+import { fillAutocomplete, mayClick, selectCustomOption } from "./custom";
 import { clickToggle, settle, typeInto } from "./native";
 
 export type ExecContext = {
@@ -79,6 +80,22 @@ export function validateAction(raw: unknown, ctx: ExecContext): Validation {
       if (field.control !== "checkbox") return { ok: false, error: "Not a checkbox" };
       break;
     }
+    case "select_custom_option": {
+      if (field.control !== "combobox") return { ok: false, error: "Not a custom dropdown" };
+      const g = mayClick(el);
+      if (!g.ok) return { ok: false, error: g.reason };
+      const want = action.optionLabel.trim().toLowerCase();
+      // Options that are already in the DOM can be checked up front; dynamic ones are checked when opened.
+      if (field.options.length > 0 && !field.options.some((o) => o.label.trim().toLowerCase() === want)) {
+        return { ok: false, error: "Option does not exist" };
+      }
+      break;
+    }
+    case "fill_autocomplete": {
+      if (field.control !== "text" || field.widget !== "combobox") return { ok: false, error: "Not an autocomplete" };
+      if (action.query.trim() === "" || action.optionLabel.trim() === "") return { ok: false, error: "Empty query" };
+      break;
+    }
   }
   return { ok: true, field, els };
 }
@@ -109,6 +126,12 @@ export async function executeAction(raw: unknown, ctx: ExecContext): Promise<Exe
       }
       case "set_checkbox":
         clickToggle(el as HTMLInputElement, action.checked);
+        break;
+      case "select_custom_option":
+        await selectCustomOption(el, action.optionLabel);
+        break;
+      case "fill_autocomplete":
+        await fillAutocomplete(el as HTMLInputElement, action.query, action.optionLabel);
         break;
       default:
         return { fieldId, executed: false, error: "Unsupported action" };

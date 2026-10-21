@@ -22,15 +22,17 @@ Status of what is verified (by a passing automated test or an executed command) 
   - Unit: `job.test.ts` (5 fixture pages + edge cases), `job-service.test.ts`.
   - E2E: `job.spec.ts` (every job page: popup company/role, description matches, decoys absent; run records job; cache hit; Unknown on non-job page; adversarial posting).
   - Portals added: `jobs/` (jsonld, no-jsonld, noisy, adversarial-jd, tabs-accordion, not-a-job).
+- Phase 4b: custom dropdown and autocomplete interaction (open, read real options, exact label match, select, verify the displayed value, detect and undo typed-but-not-selected), new validated actions, submit-control click guard.
+  - Unit: `widgets.test.ts`. E2E: `widgets.spec.ts` (custom-dropdowns and autocomplete portals, no-match and prefix-only cases).
 
 ## Partial
-- Custom dropdowns / autocomplete: observed (inputs) or not observed (div/button comboboxes) but never filled; implemented in Phase 4b.
+- Custom widgets: only ARIA-annotated comboboxes/listboxes (`role=combobox`, `aria-haspopup=listbox`, `role=option`) are recognised; un-annotated widgets are not seen. Virtualised/lazy-scrolling option lists are not scrolled.
 - Job extraction on single-page apps depends on content being rendered when the popup opens or Quick Apply is clicked; there is no re-extraction after later DOM changes (the cache lasts 6 h per URL).
 - Dynamic forms: single observation pass; fields revealed by our own fills are not handled until Phase 9.
 
 ## Not started
 - Phases 4-11 (AI field understanding, job intelligence, answer generation, resume tailoring, adapters, multi-step/recovery, companion, hardening).
-- SPEC 25.2 synthetic forms not built this session (11 of 18; the 7 built are in `tests/synthetic-portals/`): custom dropdowns, autocomplete, dynamic conditional fields, multi-step application, validation errors, resume upload, cross-origin iframe, missing personal information, field disabled during execution, DOM changes after every step, same label in several sections (the "duplicate labels" portal covers part of this).
+- SPEC 25.2 synthetic forms still missing: resume upload (11), cross-origin iframe (12), multi-step application (8), validation-errors form (9), field disabled during execution (16), DOM changes after every step (17). Built: 1-7, 10, 13-15, 18 plus unfamiliar-labels-v2 and the `jobs/` pages (see `tests/synthetic-portals/`).
 
 ## Known limitations
 - Cross-origin iframes, closed shadow roots and custom (non-native) dropdowns/autocompletes are not handled yet.

@@ -120,7 +120,6 @@ function planField(f: FormField, profile: UserProfile, opts: PlanOptions): { pla
   if (f.ambiguous && !opts.allowConflictAmbiguity) return { skipped: skip(f, "ambiguous", f.ambiguityReason ?? "Ambiguous field") };
   if (!f.enabled) return { skipped: skip(f, "unresolved", "Field is disabled or read-only") };
   if (f.control === "file") return { skipped: skip(f, "unresolved", "File uploads are not supported yet") };
-  if (f.widget === "combobox") return { skipped: skip(f, "unresolved", "Custom dropdown / autocomplete needs a selection, which is not supported yet") };
   if (f.control === "checkbox" || f.control === "radio") return { skipped: skip(f, "unresolved", "No profile value maps to a checkbox or radio group yet") };
   const key = TYPE_TO_PROFILE_KEY[f.semanticType];
   if (!key) return { skipped: skip(f, "unresolved", "No deterministic profile mapping for this field") };
@@ -134,7 +133,20 @@ function planField(f: FormField, profile: UserProfile, opts: PlanOptions): { pla
   }
 
   let action: AgentAction;
-  if (f.control === "select") {
+  if (f.control === "combobox") {
+    // Custom dropdown: options may only exist once it is opened, so an empty list is not a mismatch.
+    let optionLabel = value;
+    if (f.options.length > 0) {
+      const hit = f.options.filter((o) => normalizeForMatch(o.label) === normalizeForMatch(value) || normalizeForMatch(o.value) === normalizeForMatch(value));
+      if (hit.length !== 1) return { skipped: skip(f, "unresolved", "No option exactly matches the profile value") };
+      optionLabel = hit[0]!.label;
+    }
+    action = { type: "select_custom_option", fieldId: f.fieldId, optionLabel };
+  } else if (f.widget === "combobox") {
+    // Autocomplete: typing is not a selection, so the executor must pick a real suggestion.
+    if (!dateOk(f, value)) return { skipped: skip(f, "unresolved", "Profile date is not in the format this field requires") };
+    action = { type: "fill_autocomplete", fieldId: f.fieldId, query: value, optionLabel: value };
+  } else if (f.control === "select") {
     const opt = pickOption(f, value);
     if (opt === null) return { skipped: skip(f, "unresolved", "No option exactly matches the profile value") };
     if (f.currentValue === opt) return { skipped: skip(f, "already_correct", "Option already selected") };

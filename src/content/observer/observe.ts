@@ -1,6 +1,7 @@
 import type { ControlKind, FormField } from "@/shared/form";
 import { classifyField } from "../mapping/classify";
 import { isEnabled, isReadOnly, isVisible, normalizeText, textWithoutControls } from "./dom";
+import { displayedValue, isComboboxWidget, isCustomTrigger, listboxFor, optionElements, optionText } from "./widgets";
 import {
   collectLabelSignals,
   legendOrGroupQuestion,
@@ -21,6 +22,7 @@ const SKIP_INPUT_TYPES = new Set(["hidden", "submit", "button", "image", "reset"
 type Control = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
 function controlKind(el: Control): ControlKind | null {
+  if (isCustomTrigger(el)) return el.closest("nav, [role=navigation], footer") ? null : "combobox";
   if (el instanceof el.ownerDocument.defaultView!.HTMLSelectElement) return "select";
   if (el instanceof el.ownerDocument.defaultView!.HTMLTextAreaElement) return "textarea";
   const t = (el as HTMLInputElement).type.toLowerCase();
@@ -53,12 +55,6 @@ function sectionOf(el: Element, headingBefore: string): string {
   return headingBefore || legendText;
 }
 
-function isCombobox(el: HTMLElement): boolean {
-  const ac = el.getAttribute("aria-autocomplete");
-  const popup = el.getAttribute("aria-haspopup");
-  return el.getAttribute("role") === "combobox" || ac === "list" || ac === "both" || popup === "listbox" || popup === "true";
-}
-
 function optionLabelFor(el: HTMLInputElement): string {
   const labels = el.labels;
   if (labels && labels.length) return normalizeText(Array.from(labels).map((l) => textWithoutControls(l)).join(" "));
@@ -67,7 +63,7 @@ function optionLabelFor(el: HTMLInputElement): string {
 }
 
 export function observeForm(doc: Document): ObservedForm {
-  const all = Array.from(doc.querySelectorAll<HTMLElement>("h1,h2,h3,h4,h5,h6,[role=heading],input,select,textarea"));
+  const all = Array.from(doc.querySelectorAll<HTMLElement>("h1,h2,h3,h4,h5,h6,[role=heading],input,select,textarea,[role=combobox],[aria-haspopup=listbox]"));
   const targets = new Map<string, HTMLElement[]>();
   const fields: FormField[] = [];
   const seenRadioGroups = new Map<string, HTMLInputElement[]>();
@@ -126,10 +122,14 @@ export function observeForm(doc: Document): ObservedForm {
         currentValue = sel.selectedOptions[0]?.value ?? "";
       } else if (kind === "checkbox") {
         currentValue = (el as HTMLInputElement).checked ? "true" : "false";
+      } else if (kind === "combobox") {
+        // Options are known only if the list already exists in the DOM; otherwise they appear when opened.
+        options = optionElements(listboxFor(el, true), false).map((o) => ({ value: o.getAttribute("data-value") ?? optionText(o), label: optionText(o) }));
+        currentValue = displayedValue(el);
       } else if (kind === "file") {
         currentValue = (el as HTMLInputElement).files?.length ? "has-file" : "";
       } else {
-        currentValue = (el as HTMLInputElement | HTMLTextAreaElement).value;
+        currentValue = isComboboxWidget(el) ? displayedValue(el) : (el as HTMLInputElement | HTMLTextAreaElement).value;
       }
     }
 
@@ -172,7 +172,7 @@ export function observeForm(doc: Document): ObservedForm {
       ambiguityReason: cls.ambiguityReason,
       risk: cls.risk,
       fingerprint: fingerprintOf(els, label),
-      widget: isCombobox(el) ? "combobox" : "native",
+      widget: isComboboxWidget(el) ? "combobox" : "native",
     });
     targets.set(fieldId, els);
   }

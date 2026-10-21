@@ -74,7 +74,8 @@ export function collectLabelSignals(el: HTMLElement): LabelSignal[] {
   };
 
   push("explicit_label", explicitLabelText(el));
-  push("aria_labelledby", textOfIds(doc, el.getAttribute("aria-labelledby")));
+  // A widget that lists its own id in aria-labelledby (to read "Label + current value") must not label itself.
+  push("aria_labelledby", textOfIds(doc, (el.getAttribute("aria-labelledby") ?? "").split(/\s+/).filter((id) => id !== el.id).join(" ")));
   push("aria_label", el.getAttribute("aria-label") ?? "");
 
   const ac = (el.getAttribute("autocomplete") ?? "").trim().toLowerCase();
