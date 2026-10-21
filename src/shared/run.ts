@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { RUN_STATES } from "./state-machine";
 import { CompletionReportSchema } from "./form";
+import { JobSummarySchema } from "../job/schema";
 
 export const RunRecordSchema = z.object({
   runId: z.string().min(8),
@@ -14,6 +15,8 @@ export const RunRecordSchema = z.object({
   fieldsDiscovered: z.number().int().nonnegative().nullable(),
   resumeCount: z.number().int().nonnegative(),
   report: CompletionReportSchema.nullable(),
+  /** What was detected about the job on the page; null when nothing could be read. */
+  job: JobSummarySchema.nullable().default(null),
   /** AI usage for this run (SPEC 21.2 limits are enforced against `requests`). */
   ai: z
     .object({

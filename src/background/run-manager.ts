@@ -3,6 +3,7 @@ import type { ContentRequest, ContentResponse, ErrorResponse, PlannedFill } from
 import type { UserProfile } from "@/shared/profile";
 import { buildReport } from "@/shared/report";
 import type { RunRecord, RunsMap } from "@/shared/run";
+import type { JobSummary } from "@/job/schema";
 import type { AcceptedMapping } from "@/ai/classify/validate";
 import { InvalidTransitionError, assertTransition, isTerminal, isWorking, type RunState } from "@/shared/state-machine";
 
@@ -20,6 +21,8 @@ export type AiClassifyResult = {
 };
 
 export interface RunDeps {
+  /** Job context for the page (Phase 5). A failure here never stops the run. */
+  getJob?(tabId: number, url: string): Promise<JobSummary | null>;
   /** Optional AI field understanding (Phase 4). Absent or "off" means the run is purely deterministic. */
   classifyAi?(input: AiClassifyInput): Promise<AiClassifyResult>;
   aiRequestLimit?: number;
@@ -108,6 +111,7 @@ export class RunManager {
         fieldsDiscovered: null,
         resumeCount: 0,
         report: null,
+        job: null,
         reason: null,
         ai: { status: "off", requests: 0, cacheHits: 0, accepted: 0, provider: null, error: null },
       };
@@ -214,7 +218,13 @@ export class RunManager {
     if (!obs.ok || obs.kind !== "OBSERVED") throw new Error(obs.ok ? "Unexpected reply" : obs.message);
     const fields: FormField[] = obs.fields;
     const visible = fields.filter((f) => f.visible);
-    await this.move(runId, tabId, "DISCOVERING_FORM", { url: obs.url, pageTitle: obs.pageTitle, fieldsDiscovered: visible.length });
+    await this.move(runId, tabId, "EXTRACTING_JOB", { url: obs.url, pageTitle: obs.pageTitle });
+    let job: JobSummary | null = null;
+    if (this.deps.getJob) {
+      this.assertActive(runId, tabId);
+      job = await this.deps.getJob(tabId, obs.url).catch(() => null);
+    }
+    await this.move(runId, tabId, "DISCOVERING_FORM", { fieldsDiscovered: visible.length, job });
     if (visible.length === 0) return this.blocked(runId, tabId, "No form fields found on this page");
     if (fields.length > this.limits.maxFields) return this.blocked(runId, tabId, "Too many form fields for one run");
 

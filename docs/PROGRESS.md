@@ -18,9 +18,14 @@ Status of what is verified (by a passing automated test or an executed command) 
   - Unit: `ai-providers.test.ts`, `ai-classify.test.ts`.
   - E2E (HTTP mocked via context.route): `ai.spec.ts` (acceptance on unfamiliar-labels-v2, injection, sensitive, cache, fallback, both-fail, no-key, AI-off zero network, SW killed mid-AI-call, options panel, key isolation, bundle has no mock/keys).
   - Portals added: unfamiliar-labels-v2, missing-info, same-label-sections, custom-dropdowns, autocomplete, dynamic-conditional.
+- Phase 5: JobContext schema, deterministic extraction (JSON-LD, metadata, headings, scored main content, noise exclusion, visible-text only), section/skill/education/experience/eligibility extraction, transparent profile relevance ranking, per-URL job cache, optional AI enrichment (off by default, grounded), popup shows real company/role/match or "Unknown".
+  - Unit: `job.test.ts` (5 fixture pages + edge cases), `job-service.test.ts`.
+  - E2E: `job.spec.ts` (every job page: popup company/role, description matches, decoys absent; run records job; cache hit; Unknown on non-job page; adversarial posting).
+  - Portals added: `jobs/` (jsonld, no-jsonld, noisy, adversarial-jd, tabs-accordion, not-a-job).
 
 ## Partial
 - Custom dropdowns / autocomplete: observed (inputs) or not observed (div/button comboboxes) but never filled; implemented in Phase 4b.
+- Job extraction on single-page apps depends on content being rendered when the popup opens or Quick Apply is clicked; there is no re-extraction after later DOM changes (the cache lasts 6 h per URL).
 - Dynamic forms: single observation pass; fields revealed by our own fills are not handled until Phase 9.
 
 ## Not started

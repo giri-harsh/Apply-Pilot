@@ -78,7 +78,7 @@ describe("RunManager", () => {
     expect(run.fieldsDiscovered).toBe(1);
     expect(run.report).toMatchObject({ filled: 1, verified: 1, failed: 0 });
     expect(run.history.map((h) => h.state)).toEqual([
-      "INITIALIZING", "OBSERVING", "DISCOVERING_FORM", "MAPPING_FIELDS", "PLANNING", "FILLING", "VERIFYING", "READY_FOR_REVIEW",
+      "INITIALIZING", "OBSERVING", "EXTRACTING_JOB", "DISCOVERING_FORM", "MAPPING_FIELDS", "PLANNING", "FILLING", "VERIFYING", "READY_FOR_REVIEW",
     ]);
   });
 
@@ -191,6 +191,46 @@ describe("RunManager", () => {
     expect(store()["1"]!.state).toBe("READY_FOR_REVIEW");
     const fresh = new RunManager(deps);
     expect((await fresh.get(1))!.report?.verified).toBe(1);
+  });
+});
+
+describe("job step", () => {
+  const summary = { title: "ML Intern", company: "Acme", confidence: 0.9, warnings: [], skills: ["Python"], descriptionChars: 100, fromCache: false, matchScore: 70, topProjects: [] };
+
+  it("stores the detected job on the run", async () => {
+    const { mgr } = setup({ getJob: async () => summary });
+    await mgr.start(1);
+    await until(mgr, 1, (s) => s === "READY_FOR_REVIEW");
+    expect((await mgr.get(1))!.job).toEqual(summary);
+  });
+
+  it("a job extraction failure never stops the run", async () => {
+    const { mgr } = setup({ getJob: async () => { throw new Error("boom"); } });
+    await mgr.start(1);
+    await until(mgr, 1, (s) => s === "READY_FOR_REVIEW");
+    expect((await mgr.get(1))!.job).toBeNull();
+  });
+
+  it("keeps the job even when the page has no form", async () => {
+    const { mgr } = setup({
+      getJob: async () => summary,
+      sendToTab: async () => ({ ok: true, kind: "OBSERVED", url: "http://x.test/", pageTitle: "T", fields: [] }),
+    });
+    await mgr.start(1);
+    await until(mgr, 1, (s) => s === "BLOCKED");
+    expect((await mgr.get(1))!.job?.company).toBe("Acme");
+  });
+
+  it("a cancelled run never asks for the job", async () => {
+    let asked = 0;
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    const { mgr } = setup({ getJob: async () => { asked++; return summary; }, injectContent: async () => { await gate; } });
+    await mgr.start(1);
+    await mgr.stop(1);
+    release();
+    await new Promise((r) => setTimeout(r, 40));
+    expect(asked).toBe(0);
   });
 });
 

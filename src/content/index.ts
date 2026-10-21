@@ -8,6 +8,7 @@ import {
 import type { FormField } from "@/shared/form";
 import { executeAction, type ExecContext } from "./actions/executor";
 import { mapAiMappings, mapFields } from "./mapping/map";
+import { extractJob } from "@/job/extract";
 import { observeForm, type ObservedForm } from "./observer/observe";
 import { verifyFill } from "./verification/verify";
 
@@ -39,6 +40,8 @@ async function handle(req: ContentRequest): Promise<ContentResponse> {
       cancelled = false;
       observed = observeForm(document);
       return { ok: true, kind: "OBSERVED", url: location.href, pageTitle: document.title, fields: observed.fields };
+    case "EXTRACT_JOB":
+      return { ok: true, kind: "JOB_EXTRACTED", job: extractJob(document, location.href, { maxChars: req.maxChars }) };
     case "MAP": {
       if (!observed) return { ok: false, code: "NO_RUN", message: "Observe before mapping" };
       const { plan, skipped } = mapFields(observed.fields, req.profile);

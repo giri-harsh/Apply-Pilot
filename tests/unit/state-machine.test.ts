@@ -22,7 +22,11 @@ describe("run state machine", () => {
   it.each([
     ["IDLE", "INITIALIZING"],
     ["INITIALIZING", "OBSERVING"],
-    ["OBSERVING", "DISCOVERING_FORM"],
+    ["OBSERVING", "EXTRACTING_JOB"],
+    ["EXTRACTING_JOB", "DISCOVERING_FORM"],
+    ["EXTRACTING_JOB", "OBSERVING"],
+    ["EXTRACTING_JOB", "BLOCKED"],
+    ["EXTRACTING_JOB", "CANCELLED"],
     ["DISCOVERING_FORM", "MAPPING_FIELDS"],
     ["MAPPING_FIELDS", "PLANNING"],
     ["PLANNING", "FILLING"],
@@ -46,6 +50,11 @@ describe("run state machine", () => {
     ["IDLE", "FILLING"],
     ["IDLE", "READY_FOR_REVIEW"],
     ["INITIALIZING", "FILLING"],
+    ["OBSERVING", "DISCOVERING_FORM"], // job extraction always sits in between now
+    ["EXTRACTING_JOB", "MAPPING_FIELDS"],
+    ["EXTRACTING_JOB", "FILLING"],
+    ["IDLE", "EXTRACTING_JOB"],
+    ["DISCOVERING_FORM", "EXTRACTING_JOB"],
     ["OBSERVING", "READY_FOR_REVIEW"],
     ["DISCOVERING_FORM", "FILLING"],
     ["DISCOVERING_FORM", "PLANNING"],
@@ -76,6 +85,7 @@ describe("run state machine", () => {
   it("only working states hold the per-tab lock", () => {
     expect(isWorking("FILLING")).toBe(true);
     expect(isWorking("PLANNING")).toBe(true);
+    expect(isWorking("EXTRACTING_JOB")).toBe(true);
     expect(isWorking("READY_FOR_REVIEW")).toBe(false);
     expect(isWorking("CANCELLED")).toBe(false);
     expect(isWorking("IDLE")).toBe(false);

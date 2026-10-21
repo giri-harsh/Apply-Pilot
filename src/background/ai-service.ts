@@ -21,6 +21,8 @@ import {
   type KVStore,
 } from "@/ai/storage";
 import type { AIProvider } from "@/ai/types";
+import { enrichJob as enrichJobWithAi } from "@/job/enrich";
+import type { JobContext } from "@/job/schema";
 import type { AiStatus } from "@/shared/messages";
 import type { AiClassifyInput, AiClassifyResult } from "./run-manager";
 
@@ -68,12 +70,27 @@ export class AiService {
       models: { gemini: config.providers.gemini.model, groq: config.providers.groq.model },
       usage: { requests: usage.length, lastOutcome: usage.at(-1)?.outcome ?? null },
       cacheEntries: cache && typeof cache === "object" ? Object.keys(cache).length : 0,
+      jobEnrichment: config.job.aiEnrichment,
     };
   }
 
-  async setSettings(aiEnabled: boolean, providerOrder: ProviderId[]) {
+  async setSettings(aiEnabled: boolean, providerOrder: ProviderId[], jobEnrichment?: boolean) {
     const current = await loadAiSettings(this.deps.store);
-    return saveAiSettings(this.deps.store, { ...current, aiEnabled, providerOrder });
+    const overrides = { ...current.overrides, job: { ...current.overrides.job, aiEnrichment: jobEnrichment ?? current.overrides.job?.aiEnrichment ?? false } };
+    return saveAiSettings(this.deps.store, { ...current, aiEnabled, providerOrder, overrides });
+  }
+
+  /** Optional job enrichment: off unless AI and the enrichment switch are both on and a key exists. Never throws. */
+  async enrichJob(job: JobContext): Promise<JobContext> {
+    const { settings, config } = await this.load();
+    if (!settings.aiEnabled || !config.job.aiEnrichment) return job;
+    const providers = await this.configuredProviders(settings, config);
+    if (providers.length === 0) return job;
+    try {
+      return await enrichJobWithAi(job, { config, store: this.deps.store, providers, budget: { remaining: 1 } });
+    } catch {
+      return job;
+    }
   }
 
   setKey(provider: ProviderId, secret: string) {

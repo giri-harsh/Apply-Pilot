@@ -3,6 +3,7 @@ import { UserProfileSchema } from "./profile";
 import { AgentActionSchema, FormFieldSchema, FieldResultSchema, PROFILE_KEYS, SEMANTIC_TYPES } from "./form";
 import { PROVIDER_IDS } from "../ai/config";
 import { RunRecordSchema } from "./run";
+import { JobContextSchema, JobSummarySchema } from "../job/schema";
 
 export const ErrorResponseSchema = z.object({
   ok: z.literal(false),
@@ -32,12 +33,14 @@ export const BackgroundRequestSchema = z.discriminatedUnion("kind", [
     kind: z.literal("AI_SET_SETTINGS"),
     aiEnabled: z.boolean(),
     providerOrder: z.array(ProviderIdSchema).min(1).max(2),
+    jobEnrichment: z.boolean().optional(),
   }),
   // The only message that carries a secret, and only inbound to the service worker.
   z.object({ kind: z.literal("AI_SET_KEY"), provider: ProviderIdSchema, secret: z.string().min(1).max(400) }),
   z.object({ kind: z.literal("AI_CLEAR_KEY"), provider: ProviderIdSchema }),
   z.object({ kind: z.literal("AI_TEST_CONNECTION"), provider: ProviderIdSchema }),
   z.object({ kind: z.literal("AI_CLEAR_CACHE") }),
+  z.object({ kind: z.literal("PREVIEW_JOB"), tabId: z.number().int() }),
 ]);
 export type BackgroundRequest = z.infer<typeof BackgroundRequestSchema>;
 
@@ -49,6 +52,7 @@ export const AiStatusSchema = z.object({
   models: z.record(ProviderIdSchema, z.string()),
   usage: z.object({ requests: z.number().int(), lastOutcome: z.string().nullable() }),
   cacheEntries: z.number().int(),
+  jobEnrichment: z.boolean(),
 });
 export type AiStatus = z.infer<typeof AiStatusSchema>;
 
@@ -61,6 +65,7 @@ export const BackgroundResponseSchema = z.union([
     result: z.object({ success: z.boolean(), provider: ProviderIdSchema, outcome: z.string().max(40), latencyMs: z.number().int().nullable() }),
   }),
   z.object({ ok: z.literal(true), kind: z.literal("ack") }),
+  z.object({ ok: z.literal(true), kind: z.literal("job_preview"), job: JobSummarySchema.nullable() }),
   z.object({ ok: z.literal(false), kind: z.literal("rejected"), message: z.string().max(200) }),
   ErrorResponseSchema,
 ]);
@@ -92,6 +97,7 @@ export const ContentRequestSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("MAP_AI"), profile: UserProfileSchema, mappings: z.array(AiMappingInputSchema).max(100) }),
   z.object({ kind: z.literal("EXECUTE"), plan: z.array(PlannedFillSchema).max(500) }),
   z.object({ kind: z.literal("VERIFY"), plan: z.array(PlannedFillSchema).max(500) }),
+  z.object({ kind: z.literal("EXTRACT_JOB"), maxChars: z.number().int().min(500).max(60000) }),
   z.object({ kind: z.literal("CANCEL") }),
 ]);
 export type ContentRequest = z.infer<typeof ContentRequestSchema>;
@@ -127,6 +133,7 @@ export const ContentResponseSchema = z.union([
   }),
   z.object({ ok: z.literal(true), kind: z.literal("EXECUTED"), results: z.array(ExecutionResultSchema) }),
   z.object({ ok: z.literal(true), kind: z.literal("VERIFIED"), results: z.array(VerificationResultSchema) }),
+  z.object({ ok: z.literal(true), kind: z.literal("JOB_EXTRACTED"), job: JobContextSchema }),
   z.object({ ok: z.literal(true), kind: z.literal("CANCELLED") }),
   ErrorResponseSchema,
 ]);

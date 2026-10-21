@@ -35,9 +35,9 @@ export function AiPanel() {
 
   if (!status) return <p>Loading...</p>;
 
-  const saveSettings = async (aiEnabled: boolean, providerOrder: ProviderId[]) => {
-    setStatus((s) => (s ? { ...s, aiEnabled, providerOrder, mode: !aiEnabled ? "off" : s.mode === "off" ? "ready" : s.mode } : s)); // optimistic
-    const r = await send({ kind: "AI_SET_SETTINGS", aiEnabled, providerOrder });
+  const saveSettings = async (aiEnabled: boolean, providerOrder: ProviderId[], jobEnrichment: boolean = status.jobEnrichment) => {
+    setStatus((s) => (s ? { ...s, aiEnabled, providerOrder, jobEnrichment, mode: !aiEnabled ? "off" : s.mode === "off" ? "ready" : s.mode } : s)); // optimistic
+    const r = await send({ kind: "AI_SET_SETTINGS", aiEnabled, providerOrder, jobEnrichment });
     note("settings", r.ok ? "Saved" : "message" in r ? r.message : "Not saved");
     await refresh();
   };
@@ -74,6 +74,16 @@ export function AiPanel() {
           onChange={(e) => void saveSettings(e.target.checked, order)}
         />{" "}
         Use AI to understand unfamiliar form fields
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          name="ai.jobEnrichment"
+          checked={status.jobEnrichment}
+          disabled={!status.aiEnabled}
+          onChange={(e) => void saveSettings(status.aiEnabled, order, e.target.checked)}
+        />{" "}
+        Also use AI to find extra skills in job postings (off by default; the posting text is sent, skills must appear verbatim in it)
       </label>
       <p data-testid="ai-mode" className="muted">
         Mode: {status.mode === "off" ? "Off" : status.mode === "not_configured" ? "Not configured (add a key)" : "Ready"}

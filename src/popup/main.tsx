@@ -9,6 +9,7 @@ import {
 } from "@/shared/messages";
 import { RUNS_STORAGE_KEY, type RunRecord } from "@/shared/run";
 import type { AiStatus } from "@/shared/messages";
+import type { JobSummary } from "@/job/schema";
 import { STATE_LABELS, isWorking } from "@/shared/state-machine";
 import { PROFILE_STORAGE_KEY, loadProfile } from "@/shared/storage";
 import "./popup.css";
@@ -46,6 +47,7 @@ function Popup() {
   const [profileReady, setProfileReady] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
+  const [preview, setPreview] = useState<JobSummary | null>(null);
 
   const refresh = useCallback(async (id: number) => {
     const r = await send({ kind: "GET_RUN", tabId: id });
@@ -65,6 +67,14 @@ function Popup() {
     void loadProfile().then((p) => setProfileReady(p !== null));
     void refreshAi();
   }, [refresh, refreshAi]);
+
+  // Read the job on the page as soon as the popup opens (read-only; nothing is filled).
+  useEffect(() => {
+    if (tabId === null) return;
+    void send({ kind: "PREVIEW_JOB", tabId }).then((r) => {
+      if (r.ok && "kind" in r && r.kind === "job_preview") setPreview(r.job);
+    });
+  }, [tabId]);
 
   useEffect(() => {
     if (tabId === null) return;
@@ -94,6 +104,7 @@ function Popup() {
     else if (!r.ok) setError(r.message);
   };
 
+  const job = run?.job ?? preview;
   const rep = run?.report;
   return (
     <main className="popup">
@@ -101,8 +112,16 @@ function Popup() {
       <dl>
         <dt>Site</dt>
         <dd data-testid="site">{run ? hostOf(run.url) : "Unknown"}</dd>
-        <dt>Company / Role</dt>
-        <dd>Unknown</dd>
+        <dt>Company</dt>
+        <dd data-testid="company">{job?.company ?? "Unknown"}</dd>
+        <dt>Role</dt>
+        <dd data-testid="role">{job?.title ?? "Unknown"}</dd>
+        {job?.matchScore !== null && job?.matchScore !== undefined && (
+          <>
+            <dt>Match</dt>
+            <dd data-testid="match" title="Skill overlap with your profile. A decision aid, not a hiring prediction.">{job.matchScore}/100 (decision aid)</dd>
+          </>
+        )}
         <dt>Profile</dt>
         <dd data-testid="profile-status">{profileReady === null ? "..." : profileReady ? "Ready" : "Not set up"}</dd>
         <dt>AI</dt>
@@ -126,6 +145,11 @@ function Popup() {
           <p data-testid="discovered">Fields found: {run.fieldsDiscovered}</p>
         )}
         {run?.reason && <p data-testid="reason">{run.reason}</p>}
+        {job && job.warnings.length > 0 && (
+          <p data-testid="job-warnings" className="note">
+            Job detection notes: {job.warnings.slice(0, 2).join("; ")}
+          </p>
+        )}
         {error && <p role="alert" className="error">{error}</p>}
       </section>
 

@@ -7,10 +7,12 @@ import {
   sendValidated,
   type BackgroundRequest,
   type BackgroundResponse,
+  type ContentRequest,
 } from "@/shared/messages";
 import { chromeStore } from "@/ai/storage";
 import { loadProfile, loadRuns, saveRuns } from "@/shared/storage";
 import { AiService } from "./ai-service";
+import { JobService } from "./job-service";
 import { RunManager } from "./run-manager";
 
 // Keep API keys, settings and caches out of reach of content scripts (they run in web pages' processes).
@@ -18,7 +20,21 @@ void chrome.storage.local.setAccessLevel?.({ accessLevel: "TRUSTED_CONTEXTS" }).
 
 const ai = new AiService({ store: chromeStore(), fetchImpl: (url, init) => fetch(url, init) });
 
+const sendToTab = (tabId: number, req: ContentRequest) =>
+  sendValidated((m) => chrome.tabs.sendMessage(tabId, m), ContentRequestSchema, ContentResponseSchema, req);
+
+const jobs = new JobService({
+  store: chromeStore(),
+  injectContent: async (tabId) => {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+  },
+  sendToTab,
+  loadProfile,
+  enrich: (job) => ai.enrichJob(job),
+});
+
 const manager = new RunManager({
+  getJob: (tabId, url) => jobs.forTab(tabId, url),
   loadRuns,
   saveRuns,
   loadProfile,
@@ -26,13 +42,7 @@ const manager = new RunManager({
   async injectContent(tabId) {
     await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
   },
-  sendToTab: (tabId, req) =>
-    sendValidated(
-      (m) => chrome.tabs.sendMessage(tabId, m),
-      ContentRequestSchema,
-      ContentResponseSchema,
-      req,
-    ),
+  sendToTab,
   async tabInfo(tabId) {
     try {
       const t = await chrome.tabs.get(tabId);
@@ -64,7 +74,7 @@ async function handle(req: BackgroundRequest): Promise<BackgroundResponse> {
     case "AI_GET_STATUS":
       return { ok: true, kind: "ai_status", status: await ai.status() };
     case "AI_SET_SETTINGS": {
-      const r = await ai.setSettings(req.aiEnabled, req.providerOrder);
+      const r = await ai.setSettings(req.aiEnabled, req.providerOrder, req.jobEnrichment);
       return r.ok ? { ok: true, kind: "ack" } : { ok: false, kind: "rejected", message: r.message };
     }
     case "AI_SET_KEY": {
@@ -76,6 +86,15 @@ async function handle(req: BackgroundRequest): Promise<BackgroundResponse> {
       return { ok: true, kind: "ack" };
     case "AI_TEST_CONNECTION":
       return { ok: true, kind: "ai_test", result: await ai.testConnection(req.provider) };
+    case "PREVIEW_JOB": {
+      try {
+        const tab = await chrome.tabs.get(req.tabId);
+        const job = await jobs.forTab(req.tabId, tab.url ?? "", { inject: true });
+        return { ok: true, kind: "job_preview", job };
+      } catch {
+        return { ok: false, kind: "rejected", message: "This page cannot be read" };
+      }
+    }
     case "AI_CLEAR_CACHE":
       await ai.clearCache();
       return { ok: true, kind: "ack" };
