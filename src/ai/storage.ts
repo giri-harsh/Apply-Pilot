@@ -32,7 +32,8 @@ export const AiSettingsSchema = z.object({
 });
 export type AiSettings = z.infer<typeof AiSettingsSchema>;
 
-export const DEFAULT_AI_SETTINGS: AiSettings = { aiEnabled: false, providerOrder: ["gemini", "groq"], overrides: {} };
+// Groq first: it is the provider that passed live verification (2026-10-21); Gemini's request was accepted but timed out.
+export const DEFAULT_AI_SETTINGS: AiSettings = { aiEnabled: false, providerOrder: ["groq", "gemini"], overrides: {} };
 
 export async function loadAiSettings(store: KVStore): Promise<AiSettings> {
   const raw = (await store.get(AI_SETTINGS_KEY))[AI_SETTINGS_KEY];

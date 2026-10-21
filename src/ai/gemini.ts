@@ -2,7 +2,7 @@ import type { ProviderConfig } from "./config";
 import { AIError } from "./errors";
 import { postJson, type FetchLike } from "./http";
 import { extractJson, toGeminiSchema } from "./json";
-import type { AIProvider, StructuredRequest, StructuredResult, TextGenerationRequest, TextGenerationResult, TokenUsage } from "./types";
+import type { AIProvider, JsonSchema, StructuredRequest, StructuredResult, TextGenerationRequest, TextGenerationResult, TokenUsage } from "./types";
 
 type GeminiResponse = {
   candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
@@ -17,15 +17,23 @@ export type ProviderDeps = {
   maxResponseChars: number;
 };
 
-export function buildGeminiBody(config: ProviderConfig, req: { system: string; user: string; maxOutputTokens?: number }, responseSchema?: unknown) {
+export function buildGeminiBody(
+  config: ProviderConfig,
+  req: { system: string; user: string; maxOutputTokens?: number },
+  structured?: { mode: NonNullable<ProviderConfig["geminiSchemaMode"]>; jsonSchema: JsonSchema },
+) {
+  let system = req.system;
+  const gen: Record<string, unknown> = { temperature: 0, maxOutputTokens: req.maxOutputTokens ?? config.maxOutputTokens };
+  if (structured) {
+    gen.responseMimeType = "application/json";
+    if (structured.mode === "response_schema") gen.responseSchema = toGeminiSchema(structured.jsonSchema);
+    else if (structured.mode === "response_json_schema") gen.responseJsonSchema = structured.jsonSchema;
+    else system = `${system}\nRespond with a single JSON object matching this JSON Schema:\n${JSON.stringify(structured.jsonSchema)}`;
+  }
   return {
-    systemInstruction: { parts: [{ text: req.system }] },
+    systemInstruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts: [{ text: req.user }] }],
-    generationConfig: {
-      temperature: 0,
-      maxOutputTokens: req.maxOutputTokens ?? config.maxOutputTokens,
-      ...(responseSchema ? { responseMimeType: "application/json", responseSchema } : {}),
-    },
+    generationConfig: gen,
   };
 }
 
@@ -51,13 +59,14 @@ export class GeminiProvider implements AIProvider {
 
   async generateStructuredOutput<T>(req: StructuredRequest<T>): Promise<StructuredResult<T>> {
     const started = Date.now();
-    let schema: unknown;
+    const mode = this.deps.config.geminiSchemaMode ?? "prompt_only";
+    let body: ReturnType<typeof buildGeminiBody>;
     try {
-      schema = toGeminiSchema(req.jsonSchema);
+      body = buildGeminiBody(this.deps.config, req, { mode, jsonSchema: req.jsonSchema });
     } catch {
       throw new AIError("unknown", "schema_conversion");
     }
-    const { text, usage } = await this.call(buildGeminiBody(this.deps.config, req, schema));
+    const { text, usage } = await this.call(body);
     let parsed: unknown;
     try {
       parsed = extractJson(text);

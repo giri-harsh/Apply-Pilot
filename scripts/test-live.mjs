@@ -23,7 +23,7 @@ if (!gemini && !groq) {
 }
 
 const vitest = path.join(root, "node_modules", "vitest", "vitest.mjs");
-const res = spawnSync(process.execPath, [vitest, "run", "--config", "vitest.live.config.ts"], {
+const res = spawnSync(process.execPath, [vitest, "run", "--config", "vitest.live.config.ts", ...process.argv.slice(2)], {
   cwd: root,
   stdio: "inherit",
   env: { ...process.env, GEMINI_API_KEY: gemini, GROQ_API_KEY: groq },

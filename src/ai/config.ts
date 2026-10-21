@@ -16,6 +16,14 @@ export type ProviderConfig = {
   maxOutputTokens: number;
   /** Capability flag: when false the provider asks for json_object and relies on Zod (no try/catch probing). */
   supportsJsonSchema: boolean;
+  /**
+   * Gemini only. How the response schema is supplied:
+   *  - "prompt_only": JSON mime type + the schema written into the system prompt (Zod is the validator).
+   *  - "response_json_schema": standard JSON Schema in `responseJsonSchema`.
+   *  - "response_schema": OpenAPI-subset `responseSchema` (converted).
+   * Chosen from live verification, not by probing at runtime.
+   */
+  geminiSchemaMode?: "prompt_only" | "response_json_schema" | "response_schema";
 };
 
 export type AIConfig = {
@@ -48,9 +56,10 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
     gemini: {
       endpoint: "https://generativelanguage.googleapis.com",
       model: "gemini-3.5-flash-lite",
-      timeoutMs: 20_000,
+      timeoutMs: 45_000,
       maxOutputTokens: 1500,
       supportsJsonSchema: true,
+      geminiSchemaMode: "prompt_only",
     },
     groq: {
       endpoint: "https://api.groq.com/openai/v1",
@@ -85,6 +94,7 @@ const providerOverride = z
     timeoutMs: z.number().int().min(1000).max(60_000),
     maxOutputTokens: z.number().int().min(64).max(8192),
     supportsJsonSchema: z.boolean(),
+    geminiSchemaMode: z.enum(["prompt_only", "response_json_schema", "response_schema"]),
   })
   .partial();
 

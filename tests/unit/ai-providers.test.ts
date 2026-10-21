@@ -21,8 +21,12 @@ const geminiBody = (text: string, usage = { promptTokenCount: 11, candidatesToke
 });
 const groqBody = (text: string) => ({ choices: [{ message: { content: text } }], usage: { prompt_tokens: 20, completion_tokens: 5 } });
 
-function gemini(fetchImpl: (u: string, i: RequestInit) => Promise<Response>, key: string | null = "g-key-123456") {
-  return new GeminiProvider({ config: cfg.providers.gemini, getKey: async () => key, fetchImpl, maxResponseChars: 60_000 });
+function gemini(
+  fetchImpl: (u: string, i: RequestInit) => Promise<Response>,
+  key: string | null = "g-key-123456",
+  mode: "prompt_only" | "response_json_schema" | "response_schema" = "response_schema",
+) {
+  return new GeminiProvider({ config: { ...cfg.providers.gemini, geminiSchemaMode: mode }, getKey: async () => key, fetchImpl, maxResponseChars: 60_000 });
 }
 function groq(fetchImpl: (u: string, i: RequestInit) => Promise<Response>, over: Partial<typeof cfg.providers.groq> = {}, key: string | null = "q-key-123456") {
   return new GroqProvider({ config: { ...cfg.providers.groq, ...over }, getKey: async () => key, fetchImpl, maxResponseChars: 60_000 });
@@ -47,6 +51,24 @@ describe("Gemini provider", () => {
     expect(body.generationConfig.responseSchema.additionalProperties).toBeUndefined();
     expect(body.systemInstruction.parts[0].text).toBe("sys");
     expect(init.credentials).toBe("omit");
+  });
+
+  it("default mode is prompt_only (live-verified request shape): schema in the system prompt, JSON mime type, no response schema", async () => {
+    expect(cfg.providers.gemini.geminiSchemaMode).toBe("prompt_only");
+    const fetchImpl = vi.fn(async () => jsonResponse(geminiBody('{"ok": true}')));
+    await gemini(fetchImpl, "g-key-123456", "prompt_only").generateStructuredOutput(req);
+    const body = JSON.parse(((fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1]).body as string);
+    expect(body.generationConfig.responseMimeType).toBe("application/json");
+    expect(body.generationConfig.responseSchema).toBeUndefined();
+    expect(body.generationConfig.responseJsonSchema).toBeUndefined();
+    expect(body.systemInstruction.parts[0].text).toContain('"properties"');
+  });
+
+  it("response_json_schema mode sends the standard JSON schema untouched", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(geminiBody('{"ok": true}')));
+    await gemini(fetchImpl, "g-key-123456", "response_json_schema").generateStructuredOutput(req);
+    const body = JSON.parse(((fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1]).body as string);
+    expect(body.generationConfig.responseJsonSchema).toEqual(CONNECTION_TEST_JSON_SCHEMA);
   });
 
   it.each([

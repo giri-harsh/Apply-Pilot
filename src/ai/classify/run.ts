@@ -29,6 +29,8 @@ export type ClassifyOutcome = {
     provider: ProviderId | null;
     model: string | null;
     error: AIErrorKind | null;
+    /** Short safe code such as "http_400"; never a response body. */
+    errorCode: string | null;
   };
 };
 
@@ -46,7 +48,7 @@ const cacheKey = (p: { id: ProviderId; model: string }, f: FormField) => `${p.id
 export async function classifyUnresolvedFields(candidates: FormField[], deps: ClassifyDeps): Promise<ClassifyOutcome> {
   const { config, store, providers } = deps;
   const now = deps.now ?? Date.now;
-  const stats: ClassifyOutcome["stats"] = { candidates: candidates.length, cacheHits: 0, requests: 0, dropped: 0, provider: null, model: null, error: null };
+  const stats: ClassifyOutcome["stats"] = { candidates: candidates.length, cacheHits: 0, requests: 0, dropped: 0, provider: null, model: null, error: null, errorCode: null };
   if (candidates.length === 0 || providers.length === 0) return { accepted: [], rejected: [], stats };
 
   const cache = await loadCache(store);
@@ -98,6 +100,7 @@ export async function classifyUnresolvedFields(candidates: FormField[], deps: Cl
         answered = providers.find((p) => p.id === out.result.provider) ?? null;
       } else {
         stats.error = out.error.kind;
+        stats.errorCode = out.error.code;
       }
     }
   }
