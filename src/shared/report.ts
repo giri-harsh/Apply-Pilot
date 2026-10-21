@@ -6,6 +6,7 @@ import type { ExecutionResult, PlannedFill, VerificationResult } from "./message
  * filled   = actions that executed without error
  * verified = filled fields whose rendered value was re-read and showed no validation error
  * failed   = planned fields that did not end up verified (execution error or failed verification)
+ * aiMapped = verified fills whose field type was decided by an accepted AI mapping
  */
 export function buildReport(
   fields: FormField[],
@@ -21,22 +22,37 @@ export function buildReport(
   let filled = 0;
   let verifiedCount = 0;
   let failed = 0;
+  let aiMapped = 0;
   for (const p of plan) {
     const e = exec.get(p.fieldId);
     const v = ver.get(p.fieldId);
-    const base = { fieldId: p.fieldId, label: p.label, required: p.required, semanticType: p.semanticType };
+    const base = {
+      fieldId: p.fieldId,
+      label: p.label,
+      required: p.required,
+      semanticType: p.semanticType,
+      ...(p.aiMapped ? { aiMapped: true } : {}),
+    };
+    const dims = (execution: number | null, verification: number | null) => ({
+      identification: p.confidence?.identification ?? 0,
+      mapping: p.confidence?.mapping ?? 0,
+      profileEvidence: 1, // a plan only exists when the profile held a value
+      execution,
+      verification,
+    });
     if (!e || !e.executed) {
       failed++;
-      results.push({ ...base, outcome: "failed", reason: e?.error ?? "Not executed" });
+      results.push({ ...base, outcome: "failed", reason: e?.error ?? "Not executed", confidence: dims(0, null) });
       continue;
     }
     filled++;
     if (v?.verified) {
       verifiedCount++;
-      results.push({ ...base, outcome: "filled_verified", reason: v.reason });
+      if (p.aiMapped) aiMapped++;
+      results.push({ ...base, outcome: "filled_verified", reason: v.reason, confidence: dims(1, 1) });
     } else {
       failed++;
-      results.push({ ...base, outcome: "failed", reason: v?.reason ?? "Not verified" });
+      results.push({ ...base, outcome: "failed", reason: v?.reason ?? "Not verified", confidence: dims(1, 0) });
     }
   }
 
@@ -51,9 +67,8 @@ export function buildReport(
     ambiguous: count("ambiguous"),
     unresolved: unresolved.length,
     alreadyCorrect: count("already_correct"),
-    requiredUnresolved: results.filter(
-      (r) => r.required && !["filled_verified", "already_correct"].includes(r.outcome),
-    ).length,
+    requiredUnresolved: results.filter((r) => r.required && !["filled_verified", "already_correct"].includes(r.outcome)).length,
+    aiMapped,
     results,
   };
 }

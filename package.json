@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "node scripts/build.mjs --e2e && node scripts/build-portals.mjs && playwright test",
-    "clean": "rimraf dist dist-e2e dist-portals test-results"
+    "clean": "rimraf dist dist-e2e dist-portals test-results",
+    "test:live": "node scripts/test-live.mjs"
   },
   "dependencies": {
     "react": "^19.3.1",

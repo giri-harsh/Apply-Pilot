@@ -12,6 +12,7 @@ import {
   type UserProfile,
 } from "@/shared/profile";
 import { deleteProfile, loadProfile, saveProfile } from "@/shared/storage";
+import { AiPanel } from "./AiPanel";
 import "./options.css";
 
 type Path = (string | number)[];
@@ -148,7 +149,7 @@ const PREF_DEFS: Def[] = [
   { key: "resumeMaxPages", label: "Preferred resume length (pages)", kind: "number" },
 ];
 
-const TABS = ["Personal", "Education", "Skills", "Projects", "Experience", "Certifications", "Preferences", "Import / Export"] as const;
+const TABS = ["Personal", "Education", "Skills", "Projects", "Experience", "Certifications", "Preferences", "AI providers", "Import / Export"] as const;
 type Tab = (typeof TABS)[number];
 
 function errorsFor(issues: ProfileIssue[], base: string): string[] {
@@ -353,6 +354,8 @@ function App() {
           ))}
         </section>
       )}
+
+      {tab === "AI providers" && <AiPanel />}
 
       {tab === "Import / Export" && (
         <section>

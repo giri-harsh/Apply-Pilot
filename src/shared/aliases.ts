@@ -33,6 +33,20 @@ export const ALIAS_RULES: AliasRule[] = [
   { type: "date_of_birth", patterns: [/\bdate of birth\b/, /\bdob\b/, /\bbirth ?date\b/, /\bbirthday\b/] },
   { type: "age", exact: ["age", "your age"], patterns: [/\b(at least|over|above) (18|21)\b/, /\b(18|21) years\b/] },
   { type: "relocation", patterns: [/\brelocat/] },
+  {
+    type: "government_id",
+    patterns: [
+      /\bsocial security\b/,
+      /\bssn\b/,
+      /\bpassport\b/,
+      /\bnational (id|identity|insurance)\b/,
+      /\baadhaa?r\b/,
+      /\bpan (card|number)\b/,
+      /\btax (id|identification)\b/,
+      /\bdriver'?s? licen[sc]e\b/,
+      /\bgovernment[- ]issued\b/,
+    ],
+  },
 
   // ---- consent / declarations ----
   {

@@ -7,7 +7,7 @@ import {
 } from "@/shared/messages";
 import type { FormField } from "@/shared/form";
 import { executeAction, type ExecContext } from "./actions/executor";
-import { mapFields } from "./mapping/map";
+import { mapAiMappings, mapFields } from "./mapping/map";
 import { observeForm, type ObservedForm } from "./observer/observe";
 import { verifyFill } from "./verification/verify";
 
@@ -42,6 +42,11 @@ async function handle(req: ContentRequest): Promise<ContentResponse> {
     case "MAP": {
       if (!observed) return { ok: false, code: "NO_RUN", message: "Observe before mapping" };
       const { plan, skipped } = mapFields(observed.fields, req.profile);
+      return { ok: true, kind: "MAPPED", plan, skipped };
+    }
+    case "MAP_AI": {
+      if (!observed) return { ok: false, code: "NO_RUN", message: "Observe before mapping" };
+      const { plan, skipped } = mapAiMappings(observed.fields, req.mappings, req.profile);
       return { ok: true, kind: "MAPPED", plan, skipped };
     }
     case "EXECUTE": {

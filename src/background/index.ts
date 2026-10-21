@@ -8,13 +8,21 @@ import {
   type BackgroundRequest,
   type BackgroundResponse,
 } from "@/shared/messages";
+import { chromeStore } from "@/ai/storage";
 import { loadProfile, loadRuns, saveRuns } from "@/shared/storage";
+import { AiService } from "./ai-service";
 import { RunManager } from "./run-manager";
+
+// Keep API keys, settings and caches out of reach of content scripts (they run in web pages' processes).
+void chrome.storage.local.setAccessLevel?.({ accessLevel: "TRUSTED_CONTEXTS" }).catch(() => undefined);
+
+const ai = new AiService({ store: chromeStore(), fetchImpl: (url, init) => fetch(url, init) });
 
 const manager = new RunManager({
   loadRuns,
   saveRuns,
   loadProfile,
+  classifyAi: (input) => ai.classify(input),
   async injectContent(tabId) {
     await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
   },
@@ -53,6 +61,24 @@ async function handle(req: BackgroundRequest): Promise<BackgroundResponse> {
     }
     case "GET_RUN":
       return { ok: true, run: await manager.get(req.tabId) };
+    case "AI_GET_STATUS":
+      return { ok: true, kind: "ai_status", status: await ai.status() };
+    case "AI_SET_SETTINGS": {
+      const r = await ai.setSettings(req.aiEnabled, req.providerOrder);
+      return r.ok ? { ok: true, kind: "ack" } : { ok: false, kind: "rejected", message: r.message };
+    }
+    case "AI_SET_KEY": {
+      const r = await ai.setKey(req.provider, req.secret);
+      return r.ok ? { ok: true, kind: "ack" } : { ok: false, kind: "rejected", message: r.message };
+    }
+    case "AI_CLEAR_KEY":
+      await ai.clearKey(req.provider);
+      return { ok: true, kind: "ack" };
+    case "AI_TEST_CONNECTION":
+      return { ok: true, kind: "ai_test", result: await ai.testConnection(req.provider) };
+    case "AI_CLEAR_CACHE":
+      await ai.clearCache();
+      return { ok: true, kind: "ack" };
   }
 }
 

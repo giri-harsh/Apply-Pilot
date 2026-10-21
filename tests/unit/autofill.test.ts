@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { observeForm } from "@/content/observer/observe";
-import { matchAliases } from "@/content/mapping/aliases";
+import { matchAliases } from "@/shared/aliases";
 import { classifyField } from "@/content/mapping/classify";
 import { mapFields, readProfileValue } from "@/content/mapping/map";
 import { executeAction, validateAction, type ExecContext } from "@/content/actions/executor";

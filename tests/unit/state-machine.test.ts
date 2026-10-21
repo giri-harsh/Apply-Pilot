@@ -24,7 +24,12 @@ describe("run state machine", () => {
     ["INITIALIZING", "OBSERVING"],
     ["OBSERVING", "DISCOVERING_FORM"],
     ["DISCOVERING_FORM", "MAPPING_FIELDS"],
-    ["MAPPING_FIELDS", "FILLING"],
+    ["MAPPING_FIELDS", "PLANNING"],
+    ["PLANNING", "FILLING"],
+    ["PLANNING", "OBSERVING"],
+    ["PLANNING", "CANCELLED"],
+    ["PLANNING", "BLOCKED"],
+    ["PLANNING", "FAILED"],
     ["FILLING", "VERIFYING"],
     ["VERIFYING", "READY_FOR_REVIEW"],
     ["READY_FOR_REVIEW", "CANCELLED"],
@@ -43,6 +48,12 @@ describe("run state machine", () => {
     ["INITIALIZING", "FILLING"],
     ["OBSERVING", "READY_FOR_REVIEW"],
     ["DISCOVERING_FORM", "FILLING"],
+    ["DISCOVERING_FORM", "PLANNING"],
+    ["MAPPING_FIELDS", "FILLING"], // must pass through PLANNING now
+    ["PLANNING", "VERIFYING"],
+    ["PLANNING", "READY_FOR_REVIEW"],
+    ["IDLE", "PLANNING"],
+    ["FILLING", "PLANNING"],
     ["FILLING", "READY_FOR_REVIEW"],
     ["VERIFYING", "FILLING"],
     ["CANCELLED", "OBSERVING"],
@@ -64,6 +75,7 @@ describe("run state machine", () => {
 
   it("only working states hold the per-tab lock", () => {
     expect(isWorking("FILLING")).toBe(true);
+    expect(isWorking("PLANNING")).toBe(true);
     expect(isWorking("READY_FOR_REVIEW")).toBe(false);
     expect(isWorking("CANCELLED")).toBe(false);
     expect(isWorking("IDLE")).toBe(false);

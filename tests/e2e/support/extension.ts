@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { UserProfile } from "../../../src/shared/profile";
+import type { RunRecord } from "../../../src/shared/run";
+import { testProfile } from "../../fixtures/profile";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 export const EXTENSION_DIR = path.join(root, "dist-e2e");
@@ -67,4 +69,53 @@ export async function waitForState(popup: Page, states: string[]): Promise<strin
   const status = popup.getByTestId("status");
   await expect.poll(async () => (await status.getAttribute("data-state")) ?? "", { timeout: 20_000 }).toMatch(new RegExp(`^(${states.join("|")})$`));
   return (await status.getAttribute("data-state")) ?? "";
+}
+
+export type AiConfigInput = {
+  enabled?: boolean;
+  order?: ("gemini" | "groq")[];
+  keys?: Partial<Record<"gemini" | "groq", string>>;
+};
+
+/** Configures AI through the same messages the options page uses. */
+export async function configureAi(ext: Ext, cfg: AiConfigInput): Promise<void> {
+  const page = await ext.context.newPage();
+  await page.goto(`chrome-extension://${ext.extensionId}/options.html`);
+  for (const [provider, secret] of Object.entries(cfg.keys ?? {})) {
+    const r = await page.evaluate((a) => chrome.runtime.sendMessage({ kind: "AI_SET_KEY", provider: a.provider, secret: a.secret }), { provider, secret });
+    expect(r).toMatchObject({ ok: true });
+  }
+  if (cfg.enabled !== undefined || cfg.order) {
+    const r = await page.evaluate(
+      (a) => chrome.runtime.sendMessage({ kind: "AI_SET_SETTINGS", aiEnabled: a.enabled, providerOrder: a.order }),
+      { enabled: cfg.enabled ?? false, order: cfg.order ?? ["gemini", "groq"] },
+    );
+    expect(r).toMatchObject({ ok: true });
+  }
+  await page.close();
+}
+
+export async function getRunRecord(popup: Page, tabId: number): Promise<RunRecord> {
+  return (await popup.evaluate(async (id) => (await chrome.runtime.sendMessage({ kind: "GET_RUN", tabId: id })).run, tabId)) as RunRecord;
+}
+
+/** Opens a portal, clicks Quick Apply once, waits for a final state, and returns what happened. */
+export async function runPortal(ext: Ext, name: string, opts: { profile?: UserProfile; page?: Page } = {}) {
+  await seedProfile(ext, opts.profile ?? testProfile());
+  const page = opts.page ?? (await ext.context.newPage());
+  if (!opts.page) await page.goto(portalUrl(name));
+  const tabId = await tabIdFor(ext, page);
+  const popup = await ext.context.newPage();
+  await popup.goto(`chrome-extension://${ext.extensionId}/popup.html?targetTabId=${tabId}`);
+  const previous = (await getRunRecord(popup, tabId))?.runId ?? null;
+  await popup.getByTestId("quick-apply").click();
+  const final = ["READY_FOR_REVIEW", "BLOCKED", "FAILED", "PARTIALLY_COMPLETED"];
+  await expect
+    .poll(async () => {
+      const r = await getRunRecord(popup, tabId);
+      return Boolean(r && r.runId !== previous && final.includes(r.state));
+    }, { timeout: 25_000 })
+    .toBe(true);
+  const record = await getRunRecord(popup, tabId);
+  return { page, popup, tabId, record, report: record.report! };
 }

@@ -36,6 +36,7 @@ export const SEMANTIC_TYPES = [
   "date_of_birth",
   "age",
   "relocation",
+  "government_id",
   // other kinds
   "consent",
   "open_ended",
@@ -59,6 +60,7 @@ export const SENSITIVE_TYPES: readonly SemanticType[] = [
   "date_of_birth",
   "age",
   "relocation",
+  "government_id",
 ];
 
 export const PROFILE_KEYS = [
@@ -137,6 +139,10 @@ export const FormFieldSchema = z.object({
   risk: Risk,
   /** Page-observation fingerprint used to confirm the target is still the same field. */
   fingerprint: z.string(),
+  /** Custom widgets (combobox / autocomplete) need selection support, not typing. */
+  widget: z.enum(["native", "combobox"]).default("native"),
+  /** Set only when an accepted AI mapping decided the semantic type (SPEC 9.5). */
+  aiMapped: z.boolean().optional(),
 });
 export type FormField = z.infer<typeof FormFieldSchema>;
 
@@ -177,6 +183,17 @@ export const FieldResultSchema = z.object({
   reason: z.string(),
   /** Never contains the entered value. */
   semanticType: z.enum(SEMANTIC_TYPES),
+  aiMapped: z.boolean().optional(),
+  /** SPEC 17.1: separate dimensions, never collapsed into one unexplained score. */
+  confidence: z
+    .object({
+      identification: z.number().min(0).max(1),
+      mapping: z.number().min(0).max(1),
+      profileEvidence: z.number().min(0).max(1),
+      execution: z.number().min(0).max(1).nullable(),
+      verification: z.number().min(0).max(1).nullable(),
+    })
+    .optional(),
 });
 export type FieldResult = z.infer<typeof FieldResultSchema>;
 
@@ -190,6 +207,7 @@ export const CompletionReportSchema = z.object({
   unresolved: z.number().int().nonnegative(),
   alreadyCorrect: z.number().int().nonnegative(),
   requiredUnresolved: z.number().int().nonnegative(),
+  aiMapped: z.number().int().nonnegative().default(0),
   results: z.array(FieldResultSchema),
 });
 export type CompletionReport = z.infer<typeof CompletionReportSchema>;

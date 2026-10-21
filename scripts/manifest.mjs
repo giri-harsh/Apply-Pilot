@@ -9,8 +9,10 @@ export function buildManifest({ e2e = false } = {}) {
     options_ui: { page: "options.html", open_in_tab: true },
     background: { service_worker: "background.js" },
     permissions: ["activeTab", "scripting", "storage"],
+    // Exactly the two AI API origins, used by the service worker only. Nothing broader.
+    host_permissions: ["https://generativelanguage.googleapis.com/*", "https://api.groq.com/*"],
     minimum_chrome_version: "110",
   };
-  if (e2e) manifest.host_permissions = ["http://127.0.0.1/*"];
+  if (e2e) manifest.host_permissions.push("http://127.0.0.1/*");
   return manifest;
 }

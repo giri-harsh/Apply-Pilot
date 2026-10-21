@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Dynamic conditional fields</title></head>
+<body>
+<h1>Analyst - Conditional Co</h1>
+<form id="app">
+  <h2>Personal Information</h2>
+  <label for="n">Full name</label>
+  <input id="n" name="n" type="text">
+  <label for="e">Email</label>
+  <input id="e" name="e" type="email">
+  <label for="country">Country</label>
+  <select id="country" name="country">
+    <option value="">Select...</option>
+    <option value="IN">India</option>
+    <option value="US">United States</option>
+  </select>
+  <div id="state-wrap" hidden>
+    <label for="state">State</label>
+    <select id="state" name="state"><option value="">Select...</option></select>
+  </div>
+  <label for="status">Employment status</label>
+  <select id="status" name="status">
+    <option value="">Select...</option>
+    <option value="student">Student</option>
+    <option value="employed">Employed</option>
+  </select>
+  <div id="employer-wrap" hidden>
+    <label for="employer">Current employer</label>
+    <input id="employer" name="employer" type="text">
+  </div>
+  <button id="submit" type="submit">Submit</button>
+</form>
+<script src="/_common.js"></script>
+<script>
+  (function () {
+    var states = { IN: ["Maharashtra", "Karnataka"], US: ["California", "Texas"] };
+    document.getElementById("country").addEventListener("change", function (e) {
+      var wrap = document.getElementById("state-wrap"), sel = document.getElementById("state");
+      var list = states[e.target.value];
+      sel.innerHTML = '<option value="">Select...</option>';
+      if (list) { list.forEach(function (s) { var o = document.createElement("option"); o.value = s; o.textContent = s; sel.appendChild(o); }); wrap.hidden = false; }
+      else wrap.hidden = true;
+    });
+    document.getElementById("status").addEventListener("change", function (e) {
+      document.getElementById("employer-wrap").hidden = e.target.value !== "employed";
+    });
+  })();
+</script>
+</body></html>

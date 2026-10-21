@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Autocomplete</title>
+<style>
+  ul[role=listbox] { list-style: none; margin: 0; padding: 0; border: 1px solid #888; width: 320px; }
+  li[role=option] { padding: 4px 8px; cursor: pointer; }
+  .error { color: #b91c1c; }
+</style></head>
+<body>
+<h1>Research Intern - Suggest Labs</h1>
+<form id="app">
+  <h2>Personal Information</h2>
+  <label for="n">Full name</label>
+  <input id="n" name="n" type="text">
+
+  <label for="uni">University</label>
+  <input id="uni" name="uni" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="uni-list" autocomplete="off">
+  <ul id="uni-list" role="listbox" hidden></ul>
+  <span id="uni-msg" class="error" role="alert"></span>
+  <input type="hidden" id="uni-id" name="uni_id" value="">
+
+  <label for="city">City</label>
+  <input id="city" name="city" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="city-list" autocomplete="off">
+  <ul id="city-list" role="listbox" hidden></ul>
+  <span id="city-msg" class="error" role="alert"></span>
+  <input type="hidden" id="city-id" name="city_id" value="">
+
+  <button id="submit" type="submit">Submit Application</button>
+</form>
+<script src="/_common.js"></script>
+<script>
+  (function () {
+    var DATA = {
+      uni: [["u1", "Example Institute of Technology"], ["u2", "Example University of Arts"], ["u3", "Sample Institute of Science"]],
+      city: [["c1", "Pune"], ["c2", "Pune Cantonment"], ["c3", "Mumbai"]],
+    };
+    function setup(key) {
+      var input = document.getElementById(key), list = document.getElementById(key + "-list"), msg = document.getElementById(key + "-msg"), hidden = document.getElementById(key + "-id");
+      var timer = null;
+      function render(q) {
+        list.innerHTML = "";
+        var matches = DATA[key].filter(function (r) { return r[1].toLowerCase().indexOf(q.toLowerCase()) !== -1; });
+        matches.forEach(function (r) { var li = document.createElement("li"); li.setAttribute("role", "option"); li.dataset.id = r[0]; li.textContent = r[1]; list.appendChild(li); });
+        list.hidden = matches.length === 0;
+        input.setAttribute("aria-expanded", String(matches.length > 0));
+      }
+      input.addEventListener("input", function () {
+        hidden.value = ""; input.dataset.selected = ""; msg.textContent = "";
+        clearTimeout(timer);
+        var q = input.value;
+        // Suggestions arrive asynchronously, like a real remote autocomplete.
+        timer = setTimeout(function () { if (q.length >= 2) render(q); else { list.hidden = true; } }, 120);
+      });
+      input.addEventListener("blur", function () {
+        setTimeout(function () { if (input.value && !hidden.value) msg.textContent = "Please choose one of the suggestions"; }, 200);
+      });
+      list.addEventListener("mousedown", function (e) { e.preventDefault(); });
+      list.addEventListener("click", function (e) {
+        var li = e.target.closest("li"); if (!li) return;
+        input.value = li.textContent; hidden.value = li.dataset.id; input.dataset.selected = li.dataset.id; msg.textContent = "";
+        list.hidden = true; input.setAttribute("aria-expanded", "false");
+      });
+    }
+    setup("uni"); setup("city");
+  })();
+</script>
+</body></html>

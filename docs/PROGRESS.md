@@ -14,9 +14,14 @@ Status of what is verified (by a passing automated test or an executed command) 
 - Phase 3: deterministic autofill (observer, label resolution, alias dictionary, mapper, constrained executor, native-setter filling, verification, honest completion report). No AI, no network.
   - Unit: `tests/unit/autofill.test.ts` (label priority, aliases, mapping, executor validation, React-tracker regression, verification, report).
   - E2E: `tests/e2e/autofill.spec.ts` against 7 synthetic portals (basic, unusual labels, duplicate labels, React-controlled, required/optional, sensitive eligibility, adversarial text) incl. no-network, submit-never-clicked, idempotency.
+- Phase 4: provider layer (Gemini + Groq over fetch, structured output, tolerant JSON, error classes, retry, rate-limit/quota fallback, run budget), keys/settings/usage/cache storage, candidate gating, prompt building with delimited untrusted data, per-item validator, AI-mapped plans through the same executor/verifier, AI options panel (masked keys, test connection, order, clear cache), popup AI status and AI-mapped count, state machine PLANNING.
+  - Unit: `ai-providers.test.ts`, `ai-classify.test.ts`.
+  - E2E (HTTP mocked via context.route): `ai.spec.ts` (acceptance on unfamiliar-labels-v2, injection, sensitive, cache, fallback, both-fail, no-key, AI-off zero network, SW killed mid-AI-call, options panel, key isolation, bundle has no mock/keys).
+  - Portals added: unfamiliar-labels-v2, missing-info, same-label-sections, custom-dropdowns, autocomplete, dynamic-conditional.
 
 ## Partial
-- (none yet)
+- Custom dropdowns / autocomplete: observed (inputs) or not observed (div/button comboboxes) but never filled; implemented in Phase 4b.
+- Dynamic forms: single observation pass; fields revealed by our own fills are not handled until Phase 9.
 
 ## Not started
 - Phases 4-11 (AI field understanding, job intelligence, answer generation, resume tailoring, adapters, multi-step/recovery, companion, hardening).
@@ -29,6 +34,10 @@ Status of what is verified (by a passing automated test or an executed command) 
 
 ## Failed tests
 - (none)
+
+## Needs user config (Phase 4)
+- Verify the default model IDs (Gemini `gemini-3.5-flash-lite`, Groq `openai/gpt-oss-20b`) with Test connection; override from settings if needed.
+- API keys for the live suite (`.env`, see `.env.example`) if you want `pnpm test:live` to run. No live calls have been made.
 
 ## Needs user config
 - Nothing for Phases 0-3. API keys (Gemini/Groq) and a real profile JSON are needed from Phase 4 on.

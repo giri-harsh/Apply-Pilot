@@ -8,6 +8,7 @@ import {
   type BackgroundResponse,
 } from "@/shared/messages";
 import { RUNS_STORAGE_KEY, type RunRecord } from "@/shared/run";
+import type { AiStatus } from "@/shared/messages";
 import { STATE_LABELS, isWorking } from "@/shared/state-machine";
 import { PROFILE_STORAGE_KEY, loadProfile } from "@/shared/storage";
 import "./popup.css";
@@ -31,15 +32,29 @@ function hostOf(url: string): string {
   }
 }
 
+function aiLabel(s: AiStatus | null): string {
+  if (!s) return "...";
+  if (s.mode === "off") return "Off (rules only)";
+  if (s.mode === "not_configured") return "AI: not configured";
+  const first = s.providerOrder.find((p) => s.keys[p]?.configured);
+  return first ? (first === "gemini" ? "Gemini" : "Groq") + " ready" : "AI: not configured";
+}
+
 function Popup() {
   const [tabId, setTabId] = useState<number | null>(null);
   const [run, setRun] = useState<RunRecord | null>(null);
   const [profileReady, setProfileReady] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
 
   const refresh = useCallback(async (id: number) => {
     const r = await send({ kind: "GET_RUN", tabId: id });
-    if (r.ok) setRun(r.run);
+    if (r.ok && "run" in r) setRun(r.run);
+  }, []);
+
+  const refreshAi = useCallback(async () => {
+    const r = await send({ kind: "AI_GET_STATUS" });
+    if (r.ok && "kind" in r && r.kind === "ai_status") setAiStatus(r.status);
   }, []);
 
   useEffect(() => {
@@ -48,7 +63,8 @@ function Popup() {
       if (id !== null) void refresh(id);
     });
     void loadProfile().then((p) => setProfileReady(p !== null));
-  }, [refresh]);
+    void refreshAi();
+  }, [refresh, refreshAi]);
 
   useEffect(() => {
     if (tabId === null) return;
@@ -62,12 +78,20 @@ function Popup() {
 
   const working = run ? isWorking(run.state) : false;
 
+  // Heartbeat while a run is active: each GET_RUN also wakes a service worker that was terminated mid-run,
+  // which then rehydrates and continues the run.
+  useEffect(() => {
+    if (tabId === null || !working) return;
+    const t = setInterval(() => void refresh(tabId), 1500);
+    return () => clearInterval(t);
+  }, [tabId, working, refresh]);
+
   const act = async (kind: "START_RUN" | "STOP_RUN") => {
     if (tabId === null) return;
     setError(null);
     const r = await send({ kind, tabId });
-    if (r.ok) setRun(r.run);
-    else setError(r.message);
+    if (r.ok && "run" in r) setRun(r.run);
+    else if (!r.ok) setError(r.message);
   };
 
   const rep = run?.report;
@@ -82,7 +106,7 @@ function Popup() {
         <dt>Profile</dt>
         <dd data-testid="profile-status">{profileReady === null ? "..." : profileReady ? "Ready" : "Not set up"}</dd>
         <dt>AI</dt>
-        <dd>Off (rules only)</dd>
+        <dd data-testid="ai-status">{aiLabel(aiStatus)}</dd>
       </dl>
 
       <div className="buttons">
@@ -112,6 +136,7 @@ function Popup() {
             <li>Fields filled: {rep.filled}</li>
             <li>Fields verified: {rep.verified}</li>
             <li>Failed: {rep.failed}</li>
+            <li>AI-mapped: {rep.aiMapped}</li>
             <li>Sensitive, left for you: {rep.skippedSensitive}</li>
             <li>Ambiguous: {rep.ambiguous}</li>
             <li>Unresolved: {rep.unresolved}</li>

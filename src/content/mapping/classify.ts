@@ -1,5 +1,5 @@
 import { SENSITIVE_TYPES, type ControlKind, type LabelSource, type Risk, type SemanticType } from "@/shared/form";
-import { matchAliases, THIRD_PARTY_SECTION } from "./aliases";
+import { matchAliases, THIRD_PARTY_SECTION } from "@/shared/aliases";
 
 export type Signal = { source: LabelSource; text: string };
 

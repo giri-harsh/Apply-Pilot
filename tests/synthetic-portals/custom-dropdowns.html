@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Custom dropdowns</title>
+<style>
+  .cd { border: 1px solid #888; padding: 6px; display: inline-block; min-width: 200px; cursor: pointer; }
+  ul[role=listbox] { list-style: none; margin: 0; padding: 0; border: 1px solid #888; width: 220px; }
+  li[role=option] { padding: 4px 8px; cursor: pointer; }
+  li[aria-selected=true] { background: #cde; }
+</style></head>
+<body>
+<h1>Data Intern - Custom Controls Co</h1>
+<form id="app">
+  <h2>Personal Information</h2>
+  <label for="n">Full name</label>
+  <input id="n" name="n" type="text">
+
+  <span id="ctry-label">Country</span>
+  <div id="ctry" class="cd" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="ctry-list" aria-labelledby="ctry-label" tabindex="0">Select...</div>
+  <ul id="ctry-list" role="listbox" aria-labelledby="ctry-label" hidden>
+    <li role="option" data-value="US">United States</li>
+    <li role="option" data-value="IN">India</li>
+    <li role="option" data-value="GB">United Kingdom</li>
+  </ul>
+  <input type="hidden" id="ctry-value" name="country" value="">
+
+  <h2>Education</h2>
+  <span id="deg-label">Degree</span>
+  <button id="deg" type="button" class="cd" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="deg-label deg">Choose a degree</button>
+  <div id="deg-slot"></div>
+  <input type="hidden" id="deg-value" name="degree" value="">
+  <button id="submit" type="submit">Submit Application</button>
+</form>
+<script src="/_common.js"></script>
+<script>
+  (function () {
+    function wire(trigger, listGetter, valueInput) {
+      function close() { trigger.setAttribute("aria-expanded", "false"); const l = listGetter(); if (l) l.hidden = true; }
+      function open() { trigger.setAttribute("aria-expanded", "true"); const l = listGetter(true); if (l) l.hidden = false; }
+      trigger.addEventListener("click", function () { trigger.getAttribute("aria-expanded") === "true" ? close() : open(); });
+      trigger.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") { e.preventDefault(); open(); } if (e.key === "Escape") close(); });
+      return { close: close, select: function (li) {
+        trigger.textContent = li.textContent; trigger.dataset.value = li.dataset.value; valueInput.value = li.dataset.value;
+        Array.from(li.parentElement.children).forEach(function (o) { o.setAttribute("aria-selected", String(o === li)); });
+        close();
+      } };
+    }
+    var ctry = document.getElementById("ctry");
+    var cw = wire(ctry, function () { return document.getElementById("ctry-list"); }, document.getElementById("ctry-value"));
+    document.getElementById("ctry-list").addEventListener("click", function (e) { var li = e.target.closest("li"); if (li) cw.select(li); });
+
+    var deg = document.getElementById("deg");
+    var dw = wire(deg, function (create) {
+      var slot = document.getElementById("deg-slot");
+      if (!slot.firstChild && create) {
+        var ul = document.createElement("ul"); ul.setAttribute("role", "listbox"); ul.id = "deg-list";
+        [["bachelors", "Bachelor of Technology"], ["masters", "Master of Science"], ["phd", "PhD"]].forEach(function (o) {
+          var li = document.createElement("li"); li.setAttribute("role", "option"); li.dataset.value = o[0]; li.textContent = o[1]; ul.appendChild(li);
+        });
+        ul.addEventListener("click", function (e) { var li = e.target.closest("li"); if (li) dw.select(li); });
+        slot.appendChild(ul);
+      }
+      return slot.firstChild;
+    }, document.getElementById("deg-value"));
+  })();
+</script>
+</body></html>

@@ -10,7 +10,7 @@ function field(over: Partial<FormField> = {}): FormField {
     fieldId: "field_001", tagName: "input", inputType: "email", control: "text", label: "Email", labelSource: "explicit_label",
     signals: [], name: "email", elementId: "", autocomplete: "", placeholder: null, ariaLabel: null, required: true, visible: true,
     enabled: true, options: [], currentValue: "", sectionContext: "", semanticCandidates: ["email"], semanticType: "email",
-    confidence: 0.99, ambiguous: false, ambiguityReason: null, risk: "low", fingerprint: "x", ...over,
+    confidence: 0.99, ambiguous: false, ambiguityReason: null, risk: "low", fingerprint: "x", widget: "native", ...over,
   };
 }
 
@@ -78,7 +78,7 @@ describe("RunManager", () => {
     expect(run.fieldsDiscovered).toBe(1);
     expect(run.report).toMatchObject({ filled: 1, verified: 1, failed: 0 });
     expect(run.history.map((h) => h.state)).toEqual([
-      "INITIALIZING", "OBSERVING", "DISCOVERING_FORM", "MAPPING_FIELDS", "FILLING", "VERIFYING", "READY_FOR_REVIEW",
+      "INITIALIZING", "OBSERVING", "DISCOVERING_FORM", "MAPPING_FIELDS", "PLANNING", "FILLING", "VERIFYING", "READY_FOR_REVIEW",
     ]);
   });
 

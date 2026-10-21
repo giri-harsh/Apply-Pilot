@@ -3,12 +3,26 @@ import type { ContentRequest, ContentResponse, ErrorResponse, PlannedFill } from
 import type { UserProfile } from "@/shared/profile";
 import { buildReport } from "@/shared/report";
 import type { RunRecord, RunsMap } from "@/shared/run";
+import type { AcceptedMapping } from "@/ai/classify/validate";
 import { InvalidTransitionError, assertTransition, isTerminal, isWorking, type RunState } from "@/shared/state-machine";
 
 export type RunLimits = { maxDurationMs: number; maxFields: number; stepTimeoutMs: number };
 export const DEFAULT_LIMITS: RunLimits = { maxDurationMs: 90_000, maxFields: 300, stepTimeoutMs: 20_000 };
 
+export type AiClassifyInput = { fields: FormField[]; skipped: FieldResult[]; requestsRemaining: number };
+export type AiClassifyResult = {
+  status: RunRecord["ai"]["status"];
+  accepted: AcceptedMapping[];
+  requests: number;
+  cacheHits: number;
+  provider: string | null;
+  error: string | null;
+};
+
 export interface RunDeps {
+  /** Optional AI field understanding (Phase 4). Absent or "off" means the run is purely deterministic. */
+  classifyAi?(input: AiClassifyInput): Promise<AiClassifyResult>;
+  aiRequestLimit?: number;
   loadRuns(): Promise<RunsMap>;
   saveRuns(runs: RunsMap): Promise<void>;
   loadProfile(): Promise<UserProfile | null>;
@@ -95,6 +109,7 @@ export class RunManager {
         resumeCount: 0,
         report: null,
         reason: null,
+        ai: { status: "off", requests: 0, cacheHits: 0, accepted: 0, provider: null, error: null },
       };
       this.runs[key(tabId)] = run;
       await this.persist();
@@ -211,8 +226,45 @@ export class RunManager {
     await this.move(runId, tabId, "MAPPING_FIELDS");
     const mapped = await this.call(runId, tabId, { kind: "MAP", profile });
     if (!mapped.ok || mapped.kind !== "MAPPED") throw new Error(mapped.ok ? "Unexpected reply" : mapped.message);
-    const plan: PlannedFill[] = mapped.plan;
-    const skipped: FieldResult[] = mapped.skipped;
+    const plan: PlannedFill[] = [...mapped.plan];
+    let skipped: FieldResult[] = [...mapped.skipped];
+
+    // Phase 4: ask the AI only about fields the rules could not place. A failure here never stops the run.
+    const runNow = cur()!;
+    let ai: RunRecord["ai"] = runNow.ai;
+    let aiAccepted: AcceptedMapping[] = [];
+    if (this.deps.classifyAi) {
+      this.assertActive(runId, tabId);
+      const limit = this.deps.aiRequestLimit ?? 3;
+      try {
+        const r = await this.deps.classifyAi({ fields, skipped, requestsRemaining: Math.max(0, limit - runNow.ai.requests) });
+        aiAccepted = r.accepted;
+        ai = {
+          status: r.status,
+          requests: runNow.ai.requests + r.requests,
+          cacheHits: runNow.ai.cacheHits + r.cacheHits,
+          accepted: r.accepted.length,
+          provider: r.provider,
+          error: r.error,
+        };
+      } catch {
+        ai = { ...runNow.ai, status: "unavailable", error: "unexpected" };
+      }
+    }
+
+    await this.move(runId, tabId, "PLANNING", { ai });
+    if (aiAccepted.length > 0) {
+      const mappedAi = await this.call(runId, tabId, {
+        kind: "MAP_AI",
+        profile,
+        mappings: aiAccepted.map((m) => ({ fieldId: m.fieldId, semanticType: m.semanticType, profileKey: m.profileKey, confidence: m.confidence })),
+      });
+      if (!mappedAi.ok || mappedAi.kind !== "MAPPED") throw new Error(mappedAi.ok ? "Unexpected reply" : mappedAi.message);
+      const touched = new Set([...mappedAi.plan.map((p) => p.fieldId), ...mappedAi.skipped.map((x) => x.fieldId)]);
+      skipped = skipped.filter((x) => !touched.has(x.fieldId));
+      plan.push(...mappedAi.plan);
+      skipped.push(...mappedAi.skipped);
+    }
 
     let executed: { fieldId: string; executed: boolean; error: string | null }[] = [];
     let verified: { fieldId: string; verified: boolean; reason: string }[] = [];

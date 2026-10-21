@@ -53,6 +53,12 @@ function sectionOf(el: Element, headingBefore: string): string {
   return headingBefore || legendText;
 }
 
+function isCombobox(el: HTMLElement): boolean {
+  const ac = el.getAttribute("aria-autocomplete");
+  const popup = el.getAttribute("aria-haspopup");
+  return el.getAttribute("role") === "combobox" || ac === "list" || ac === "both" || popup === "listbox" || popup === "true";
+}
+
 function optionLabelFor(el: HTMLInputElement): string {
   const labels = el.labels;
   if (labels && labels.length) return normalizeText(Array.from(labels).map((l) => textWithoutControls(l)).join(" "));
@@ -166,6 +172,7 @@ export function observeForm(doc: Document): ObservedForm {
       ambiguityReason: cls.ambiguityReason,
       risk: cls.risk,
       fingerprint: fingerprintOf(els, label),
+      widget: isCombobox(el) ? "combobox" : "native",
     });
     targets.set(fieldId, els);
   }
@@ -174,24 +181,45 @@ export function observeForm(doc: Document): ObservedForm {
   return { fields, targets };
 }
 
+const PERSONAL_SECTION = /\b(personal|applicant|about you|contact|candidate|basic|your details|identity)\b/i;
+
+function flag(f: FormField, reason: string): void {
+  f.ambiguous = true;
+  f.ambiguityReason = f.ambiguityReason ?? reason;
+}
+
 /**
- * Two applicant-identity fields with the same type, label and section cannot both be "the" answer
- * (the exception is a deliberate confirmation field such as "Confirm email").
+ * Duplicates cannot be resolved by guessing:
+ *  1. same type + label + section: indistinguishable, all ambiguous ("Confirm email" differs in label, so it is fine);
+ *  2. same type + label in different sections (e.g. "Name" under Personal and under Previous School): only the single
+ *     clearly personal section may be filled; every other occurrence is ambiguous.
  */
 export function markDuplicateAmbiguity(fields: FormField[]): void {
-  const groups = new Map<string, FormField[]>();
-  for (const f of fields) {
-    if (!f.visible || f.semanticType === "unknown" || f.semanticType === "open_ended") continue;
+  const considered = fields.filter((f) => f.visible && !["unknown", "open_ended", "third_party_contact"].includes(f.semanticType));
+
+  const sameSection = new Map<string, FormField[]>();
+  for (const f of considered) {
     const key = `${f.semanticType}|${f.label.toLowerCase()}|${f.sectionContext.toLowerCase()}`;
-    const g = groups.get(key);
-    if (g) g.push(f);
-    else groups.set(key, [f]);
+    sameSection.set(key, [...(sameSection.get(key) ?? []), f]);
   }
-  for (const g of groups.values()) {
-    if (g.length < 2) continue;
+  for (const g of sameSection.values()) {
+    if (g.length > 1) for (const f of g) flag(f, `${g.length} fields share the label "${f.label}" in the same section`);
+  }
+
+  const crossSection = new Map<string, FormField[]>();
+  for (const f of considered) {
+    const key = `${f.semanticType}|${f.label.toLowerCase()}`;
+    crossSection.set(key, [...(crossSection.get(key) ?? []), f]);
+  }
+  for (const g of crossSection.values()) {
+    const sections = new Set(g.map((f) => f.sectionContext.toLowerCase()));
+    if (sections.size < 2) continue;
+    const personal = new Set(g.filter((f) => PERSONAL_SECTION.test(f.sectionContext)).map((f) => f.sectionContext.toLowerCase()));
+    const chosen = personal.size === 1 ? [...personal][0] : null;
     for (const f of g) {
-      f.ambiguous = true;
-      f.ambiguityReason = f.ambiguityReason ?? `${g.length} fields share the label "${f.label}" in the same section`;
+      if (chosen === null || f.sectionContext.toLowerCase() !== chosen) {
+        flag(f, `The label "${f.label}" appears in several sections and this one is not clearly the applicant's`);
+      }
     }
   }
 }
