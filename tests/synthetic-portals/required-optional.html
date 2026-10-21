@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Required and optional</title></head>
+<body>
+<h1>Data Intern - Mixed Co</h1>
+<form id="app">
+  <label for="n">Full name (required)</label>
+  <input id="n" type="text" required name="n">
+  <label for="e">Email</label>
+  <input id="e" type="email" required name="e">
+  <label for="p">Phone (optional)</label>
+  <input id="p" type="tel" name="p">
+  <label for="ce">Current employer</label>
+  <input id="ce" type="text" required name="ce">
+  <label for="pre">Preferred name</label>
+  <input id="pre" type="text" name="pre" value="Existing Value">
+  <label for="sel">Degree</label>
+  <select id="sel" name="deg" required>
+    <option value="">Choose</option>
+    <option value="bachelors">Bachelor of Technology</option>
+    <option value="masters">Master of Science</option>
+  </select>
+  <label for="why">Why do you want to join us?</label>
+  <textarea id="why" name="why" required></textarea>
+  <label for="dis">City (disabled)</label>
+  <input id="dis" type="text" name="city" disabled>
+  <input id="trap" type="text" name="trap" aria-label="Website" style="display:none">
+  <button id="submit" type="submit">Submit</button>
+</form>
+<script src="/_common.js"></script>
+</body></html>

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Unusual labels</title></head>
+<body>
+<h1>Research Assistant - Odd Labels Lab</h1>
+<form id="app">
+  <h2>About you</h2>
+  <label>Given name <input type="text" name="q_17"></label>
+  <label>Surname <input type="text" name="q_18"></label>
+  <input type="email" aria-label="Contact e-mail" name="f3">
+  <span id="lbl-mobile">Mobile #</span>
+  <input type="text" aria-labelledby="lbl-mobile" name="f4">
+  <input type="text" placeholder="Your city" name="f5">
+  <input type="text" autocomplete="postal-code" name="f6">
+  <div class="q"><span>GitHub profile</span><input type="text" name="f7"></div>
+  <label for="odd">Favourite colour</label>
+  <input id="odd" type="text" name="colour">
+  <button id="submit" type="submit">Apply now</button>
+</form>
+<script src="/_common.js"></script>
+</body></html>

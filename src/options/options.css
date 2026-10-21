@@ -1,0 +1,20 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; font-size: 14px; }
+body { margin: 0; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 16px; }
+nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+nav button { padding: 6px 10px; border: 1px solid #8884; border-radius: 6px; background: transparent; cursor: pointer; font: inherit; color: inherit; }
+nav button.on { background: #2563eb; color: #fff; border-color: #2563eb; }
+.field { display: grid; gap: 3px; margin-bottom: 8px; }
+.row { display: grid; grid-template-columns: 1fr 190px; gap: 8px; align-items: start; }
+.row > select { margin-top: 20px; }
+label { font-weight: 600; }
+input[type="text"], input[type="number"], textarea, select { font: inherit; padding: 5px 7px; width: 100%; box-sizing: border-box; }
+input[type="checkbox"] { width: auto; justify-self: start; }
+fieldset { margin: 0 0 12px; border: 1px solid #8884; border-radius: 6px; }
+button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid #8886; cursor: pointer; }
+button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+button.danger { color: #b91c1c; }
+.bar { position: sticky; bottom: 0; display: flex; gap: 12px; align-items: center; padding: 10px 0; background: Canvas; }
+.err { color: #b91c1c; margin: 0; font-size: 12px; }
+.errlist { color: #b91c1c; }
+.muted { color: GrayText; }
