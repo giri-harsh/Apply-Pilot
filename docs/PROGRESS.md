@@ -8,6 +8,10 @@ Status of what is verified (by a passing automated test or an executed command) 
   - Unit: `tests/unit/state-machine.test.ts`, `messages.test.ts`, `run-manager.test.ts`.
   - E2E: `tests/e2e/foundation.spec.ts` (extension loads, Quick Apply inspects a synthetic form, manifest permissions, single-file bundles, duplicate guard, invalid/foreign messages rejected, SW termination + resume).
 
+- Phase 2: Zod UserProfile schemas with provenance, options page CRUD for all sections, JSON import/export with visible validation errors, persistence.
+  - Unit: `tests/unit/profile.test.ts`.
+  - E2E: `tests/e2e/profile.spec.ts` (full CRUD, restart persistence with a persistent context, autofill reads the saved profile, visible validation errors, import/export).
+
 ## Partial
 - (none yet)
 
