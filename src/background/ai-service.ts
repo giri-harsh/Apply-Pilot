@@ -24,9 +24,19 @@ import type { AIProvider } from "@/ai/types";
 import { enrichJob as enrichJobWithAi } from "@/job/enrich";
 import type { JobContext } from "@/job/schema";
 import type { AiStatus } from "@/shared/messages";
-import type { AiClassifyInput, AiClassifyResult } from "./run-manager";
+import { generateAnswers, type AnswerQuestion } from "@/answers/generate";
+import { classifyQuestion } from "@/answers/questions";
+import { clearAnswerCache, deleteAnswer, listAnswers, saveAnswer } from "@/answers/storage";
+import type { AiClassifyInput, AiClassifyResult, AnswerPhaseInput, AnswerPhaseResult } from "./run-manager";
 
-export type AiServiceDeps = { store: KVStore; fetchImpl: FetchLike; baseConfig?: AIConfig; now?: () => number };
+export type AiServiceDeps = {
+  store: KVStore;
+  fetchImpl: FetchLike;
+  baseConfig?: AIConfig;
+  now?: () => number;
+  /** Cached job context for a URL (Phase 5), used as the job slice of the answer prompt. */
+  loadJob?: (url: string) => Promise<JobContext | null>;
+};
 
 /**
  * Everything AI lives behind this class, inside the service worker. API keys are read here and handed only
@@ -71,13 +81,25 @@ export class AiService {
       usage: { requests: usage.length, lastOutcome: usage.at(-1)?.outcome ?? null },
       cacheEntries: cache && typeof cache === "object" ? Object.keys(cache).length : 0,
       jobEnrichment: config.job.aiEnrichment,
+      answerMemory: settings.answerMemory,
     };
   }
 
-  async setSettings(aiEnabled: boolean, providerOrder: ProviderId[], jobEnrichment?: boolean) {
+  async setSettings(aiEnabled: boolean, providerOrder: ProviderId[], jobEnrichment?: boolean, answerMemory?: boolean) {
     const current = await loadAiSettings(this.deps.store);
     const overrides = { ...current.overrides, job: { ...current.overrides.job, aiEnrichment: jobEnrichment ?? current.overrides.job?.aiEnrichment ?? false } };
-    return saveAiSettings(this.deps.store, { ...current, aiEnabled, providerOrder, overrides });
+    return saveAiSettings(this.deps.store, { ...current, aiEnabled, providerOrder, overrides, answerMemory: answerMemory ?? current.answerMemory });
+  }
+
+  // ---- reusable answers (SPEC 19.3): saved only on an explicit request ----
+  listAnswers() {
+    return listAnswers(this.deps.store);
+  }
+  saveAnswer(a: Parameters<typeof saveAnswer>[1]) {
+    return saveAnswer(this.deps.store, a);
+  }
+  deleteAnswer(id: string) {
+    return deleteAnswer(this.deps.store, id);
   }
 
   /** Optional job enrichment: off unless AI and the enrichment switch are both on and a key exists. Never throws. */
@@ -99,8 +121,72 @@ export class AiService {
   clearKey(provider: ProviderId) {
     return clearApiKey(this.deps.store, provider);
   }
-  clearCache() {
-    return clearCache(this.deps.store);
+  async clearCache() {
+    await clearCache(this.deps.store);
+    await clearAnswerCache(this.deps.store);
+  }
+
+  /**
+   * Phase 6. Deterministic partition first (SPEC 14.5): only technical / profile-answerable questions are ever
+   * sent to a model. Refused categories are reported with their reason whether or not AI is on. Never throws.
+   */
+  async answerQuestions(input: AnswerPhaseInput): Promise<AnswerPhaseResult> {
+    const { settings, config } = await this.load();
+    const out: AnswerPhaseResult = { status: "off", plan: [], results: [], answers: [], requests: 0, cacheHits: 0, memoryHits: 0, error: null };
+
+    const unresolvedIds = new Set(input.skipped.filter((s) => s.outcome === "unresolved" || s.outcome === "ambiguous").map((s) => s.fieldId));
+    // An ambiguous field cannot be filled (the executor refuses it), so it is only ever eligible for a refusal reason.
+    const ambiguousIds = new Set(input.skipped.filter((s) => s.outcome === "ambiguous").map((s) => s.fieldId));
+    const toGenerate: AnswerQuestion[] = [];
+    let n = 0;
+    for (const f of input.fields) {
+      if (!unresolvedIds.has(f.fieldId) || !f.visible || !f.enabled || f.widget !== "native" || f.currentValue.trim() !== "") continue;
+      const isQuestion = f.control === "textarea" || (f.control === "text" && f.semanticType === "open_ended");
+      if (!isQuestion) continue;
+      const d = classifyQuestion(f.label, f.semanticType);
+      if (d.kind === "refuse") {
+        const sensitive = ["sensitive_demographic", "eligibility", "legal_declaration", "binding_agreement"].includes(d.category);
+        out.results.push({ fieldId: f.fieldId, label: f.label, outcome: sensitive ? "skipped_sensitive" : "unresolved", required: f.required, reason: d.reason, semanticType: f.semanticType });
+      } else if (!ambiguousIds.has(f.fieldId)) {
+        toGenerate.push({ fieldId: f.fieldId, questionId: `q${++n}`, label: f.label, category: d.category, technologies: d.technologies, limit: f.limit });
+      }
+    }
+    if (toGenerate.length === 0) return { ...out, status: settings.aiEnabled ? "used" : "off" };
+    if (!settings.aiEnabled) return out;
+    const providers = await this.configuredProviders(settings, config);
+    if (providers.length === 0) return { ...out, status: "not_configured" };
+
+    const job = input.url && this.deps.loadJob ? await this.deps.loadJob(input.url).catch(() => null) : null;
+    const gen = await generateAnswers(toGenerate, {
+      config,
+      store: this.deps.store,
+      providers,
+      budget: { remaining: Math.min(input.requestsRemaining, config.limits.maxRequestsPerRun) },
+      profile: input.profile,
+      job,
+      memoryEnabled: settings.answerMemory,
+      now: this.deps.now,
+    });
+    const byField = new Map(input.fields.map((f) => [f.fieldId, f]));
+    for (const r of gen.results) {
+      const f = byField.get(r.fieldId)!;
+      if (r.status === "ok") {
+        out.plan.push({
+          fieldId: f.fieldId,
+          action: { type: "fill_text", fieldId: f.fieldId, value: r.text },
+          semanticType: "open_ended",
+          label: f.label,
+          required: f.required,
+          aiWritten: true,
+          evidence: r.evidenceNames,
+          confidence: { identification: f.confidence, mapping: 0.5 },
+        });
+        out.answers.push({ fieldId: f.fieldId, label: f.label.slice(0, 300), category: r.category, text: r.text, evidence: r.evidenceNames, signature: r.signature, source: r.source });
+      } else {
+        out.results.push({ fieldId: f.fieldId, label: f.label, outcome: "unresolved", required: f.required, reason: r.reason, semanticType: f.semanticType });
+      }
+    }
+    return { ...out, status: gen.stats.error ? "unavailable" : "used", requests: gen.stats.requests, cacheHits: gen.stats.cacheHits, memoryHits: gen.stats.memoryHits, error: gen.stats.error };
   }
 
   /** One minimal real call so the options page can show the true result of the user's key and model. */

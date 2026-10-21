@@ -29,11 +29,13 @@ export const AiSettingsSchema = z.object({
     .max(2)
     .refine((a) => new Set(a).size === a.length, "Duplicate provider"),
   overrides: ConfigOverridesSchema,
+  /** SPEC 19.4: the user can switch reuse of approved answers off. Saving still needs an explicit click. */
+  answerMemory: z.boolean().default(true),
 });
 export type AiSettings = z.infer<typeof AiSettingsSchema>;
 
 // Groq first: it is the provider that passed live verification (2026-10-21); Gemini's request was accepted but timed out.
-export const DEFAULT_AI_SETTINGS: AiSettings = { aiEnabled: false, providerOrder: ["groq", "gemini"], overrides: {} };
+export const DEFAULT_AI_SETTINGS: AiSettings = { aiEnabled: false, providerOrder: ["groq", "gemini"], overrides: {}, answerMemory: true };
 
 export async function loadAiSettings(store: KVStore): Promise<AiSettings> {
   const raw = (await store.get(AI_SETTINGS_KEY))[AI_SETTINGS_KEY];

@@ -12,13 +12,18 @@ import {
 import { chromeStore } from "@/ai/storage";
 import { loadProfile, loadRuns, saveRuns } from "@/shared/storage";
 import { AiService } from "./ai-service";
+import { getCachedJob } from "@/job/storage";
 import { JobService } from "./job-service";
 import { RunManager } from "./run-manager";
 
 // Keep API keys, settings and caches out of reach of content scripts (they run in web pages' processes).
 void chrome.storage.local.setAccessLevel?.({ accessLevel: "TRUSTED_CONTEXTS" }).catch(() => undefined);
 
-const ai = new AiService({ store: chromeStore(), fetchImpl: (url, init) => fetch(url, init) });
+const ai = new AiService({
+  store: chromeStore(),
+  fetchImpl: (url, init) => fetch(url, init),
+  loadJob: (url) => getCachedJob(chromeStore(), url),
+});
 
 const sendToTab = (tabId: number, req: ContentRequest) =>
   sendValidated((m) => chrome.tabs.sendMessage(tabId, m), ContentRequestSchema, ContentResponseSchema, req);
@@ -39,6 +44,7 @@ const manager = new RunManager({
   saveRuns,
   loadProfile,
   classifyAi: (input) => ai.classify(input),
+  answerQuestions: (input) => ai.answerQuestions(input),
   async injectContent(tabId) {
     await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
   },
@@ -74,7 +80,7 @@ async function handle(req: BackgroundRequest): Promise<BackgroundResponse> {
     case "AI_GET_STATUS":
       return { ok: true, kind: "ai_status", status: await ai.status() };
     case "AI_SET_SETTINGS": {
-      const r = await ai.setSettings(req.aiEnabled, req.providerOrder, req.jobEnrichment);
+      const r = await ai.setSettings(req.aiEnabled, req.providerOrder, req.jobEnrichment, req.answerMemory);
       return r.ok ? { ok: true, kind: "ack" } : { ok: false, kind: "rejected", message: r.message };
     }
     case "AI_SET_KEY": {
@@ -97,6 +103,25 @@ async function handle(req: BackgroundRequest): Promise<BackgroundResponse> {
     }
     case "AI_CLEAR_CACHE":
       await ai.clearCache();
+      return { ok: true, kind: "ack" };
+    case "SAVE_ANSWER": {
+      const run = await manager.get(req.tabId);
+      const a = run?.answers.find((x) => x.fieldId === req.fieldId);
+      if (!run || !a) return { ok: false, kind: "rejected", message: "No such answer on this run" };
+      await ai.saveAnswer({
+        category: a.category,
+        questionSignature: a.signature,
+        questionText: a.label,
+        text: a.text,
+        evidence: a.evidence,
+        job: { company: run.job?.company ?? null, title: run.job?.title ?? null },
+      });
+      return { ok: true, kind: "ack" };
+    }
+    case "LIST_ANSWERS":
+      return { ok: true, kind: "answers", answers: await ai.listAnswers() };
+    case "DELETE_ANSWER":
+      await ai.deleteAnswer(req.id);
       return { ok: true, kind: "ack" };
   }
 }

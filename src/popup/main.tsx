@@ -48,6 +48,7 @@ function Popup() {
   const [error, setError] = useState<string | null>(null);
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
   const [preview, setPreview] = useState<JobSummary | null>(null);
+  const [saved, setSaved] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(async (id: number) => {
     const r = await send({ kind: "GET_RUN", tabId: id });
@@ -102,6 +103,14 @@ function Popup() {
     const r = await send({ kind, tabId });
     if (r.ok && "run" in r) setRun(r.run);
     else if (!r.ok) setError(r.message);
+  };
+
+  // SPEC 19.3: saved only when the user clicks; never automatic.
+  const saveAnswer = async (fieldId: string) => {
+    if (tabId === null) return;
+    const r = await send({ kind: "SAVE_ANSWER", tabId, fieldId });
+    if (r.ok) setSaved((s) => new Set(s).add(fieldId));
+    else if ("message" in r) setError(r.message);
   };
 
   const job = run?.job ?? preview;
@@ -161,12 +170,38 @@ function Popup() {
             <li>Fields verified: {rep.verified}</li>
             <li>Failed: {rep.failed}</li>
             <li>AI-mapped: {rep.aiMapped}</li>
+            <li>AI-written, review: {rep.aiWritten}</li>
             <li>Sensitive, left for you: {rep.skippedSensitive}</li>
             <li>Ambiguous: {rep.ambiguous}</li>
             <li>Unresolved: {rep.unresolved}</li>
             <li>Required but unresolved: {rep.requiredUnresolved}</li>
           </ul>
           <p className="note">Nothing has been submitted. Review the form and submit it yourself.</p>
+        </section>
+      )}
+
+      {run && run.answers.length > 0 && (
+        <section data-testid="answers" className="report">
+          <h2>AI-written answers: review before submitting</h2>
+          {run.answers.map((a) => {
+            const result = rep?.results.find((r) => r.fieldId === a.fieldId);
+            return (
+              <article key={a.fieldId} data-testid={`answer-${a.fieldId}`} className="answer">
+                <h3>{a.label}</h3>
+                <p>{a.text}</p>
+                <p className="note">
+                  Evidence used: {a.evidence.join("; ") || "none"} ({a.source}){result ? `, ${result.outcome === "filled_verified" ? "inserted and verified" : "not inserted"}` : ""}
+                </p>
+                <button
+                  data-testid={`save-answer-${a.fieldId}`}
+                  disabled={saved.has(a.fieldId)}
+                  onClick={() => void saveAnswer(a.fieldId)}
+                >
+                  {saved.has(a.fieldId) ? "Saved for reuse" : "Save as reusable answer"}
+                </button>
+              </article>
+            );
+          })}
         </section>
       )}
 

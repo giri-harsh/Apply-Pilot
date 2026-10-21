@@ -92,7 +92,9 @@ test.describe("Phase 4: universal field understanding (HTTP mocked)", () => {
     expect(user.split("PAGE_DATA_END>>>")).toHaveLength(2); // the portal's forged delimiter was neutralised
     expect(user.split("<<<PAGE_DATA_START")).toHaveLength(2);
     const sent = (JSON.parse(/<<<PAGE_DATA_START\n([\s\S]*?)\nPAGE_DATA_END>>>/.exec(user)![1]!) as PromptField[]).map((f) => f.fieldId);
-    expect(sent.length).toBe(11); // every field the rules could not place, nothing else
+    // Every field the rules could not place, except the one whose label tries to instruct the model (never sent).
+    expect(sent.length).toBe(10);
+    expect(user).not.toMatch(/Ignore all instructions|apiKey/i);
   });
 
   test("sensitive, consent and third-party fields never reach the API", async () => {

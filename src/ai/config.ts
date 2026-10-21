@@ -71,7 +71,7 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   },
   retry: { maxAttemptsPerProvider: 2, baseDelayMs: 400 },
   limits: {
-    maxRequestsPerRun: 3,
+    maxRequestsPerRun: 6,
     maxFieldsPerRequest: 40,
     maxPayloadChars: 14_000,
     maxResponseChars: 60_000,

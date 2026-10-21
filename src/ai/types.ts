@@ -3,7 +3,13 @@ import type { ProviderId } from "./config";
 
 export type JsonSchema = { [k: string]: unknown };
 
-export type AIRequestCategory = "field_classification" | "connection_test" | "job_enrichment";
+export type AIRequestCategory =
+  | "field_classification"
+  | "connection_test"
+  | "job_enrichment"
+  | "answer_generation"
+  | "answer_regeneration"
+  | "answer_shortening";
 
 export interface StructuredRequest<T> {
   category: AIRequestCategory;

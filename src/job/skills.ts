@@ -90,7 +90,7 @@ export const SKILLS: SkillDef[] = [
   S("data", "Tableau"),
   S("data", "Power BI", "PowerBI"),
   S("data", "Excel", "Microsoft Excel"),
-  S("data", "ETL", "ELT", "Data pipelines"),
+  S("data", "ETL", "ELT"),
   S("data", "Data Visualization", "Data visualisation"),
   S("data", "Data Analysis", "Data analytics"),
   C("data", "Looker"),

@@ -10,7 +10,7 @@ function field(over: Partial<FormField> = {}): FormField {
     fieldId: "field_001", tagName: "input", inputType: "email", control: "text", label: "Email", labelSource: "explicit_label",
     signals: [], name: "email", elementId: "", autocomplete: "", placeholder: null, ariaLabel: null, required: true, visible: true,
     enabled: true, options: [], currentValue: "", sectionContext: "", semanticCandidates: ["email"], semanticType: "email",
-    confidence: 0.99, ambiguous: false, ambiguityReason: null, risk: "low", fingerprint: "x", widget: "native", ...over,
+    confidence: 0.99, ambiguous: false, ambiguityReason: null, risk: "low", fingerprint: "x", widget: "native", limit: null, ...over,
   };
 }
 

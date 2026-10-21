@@ -20,7 +20,22 @@ export type AiClassifyResult = {
   error: string | null;
 };
 
+export type AnswerPhaseInput = { fields: FormField[]; skipped: FieldResult[]; profile: UserProfile; url: string; requestsRemaining: number };
+export type AnswerPhaseResult = {
+  status: RunRecord["ai"]["status"];
+  plan: PlannedFill[];
+  /** Per-field outcomes for questions that were refused or could not be answered, with the reason. */
+  results: FieldResult[];
+  answers: RunRecord["answers"];
+  requests: number;
+  cacheHits: number;
+  memoryHits: number;
+  error: string | null;
+};
+
 export interface RunDeps {
+  /** Grounded answers for open-ended questions (Phase 6). */
+  answerQuestions?(input: AnswerPhaseInput): Promise<AnswerPhaseResult>;
   /** Job context for the page (Phase 5). A failure here never stops the run. */
   getJob?(tabId: number, url: string): Promise<JobSummary | null>;
   /** Optional AI field understanding (Phase 4). Absent or "off" means the run is purely deterministic. */
@@ -112,6 +127,7 @@ export class RunManager {
         resumeCount: 0,
         report: null,
         job: null,
+        answers: [],
         reason: null,
         ai: { status: "off", requests: 0, cacheHits: 0, accepted: 0, provider: null, error: null },
       };
@@ -245,7 +261,7 @@ export class RunManager {
     let aiAccepted: AcceptedMapping[] = [];
     if (this.deps.classifyAi) {
       this.assertActive(runId, tabId);
-      const limit = this.deps.aiRequestLimit ?? 3;
+      const limit = this.deps.aiRequestLimit ?? 6;
       try {
         const r = await this.deps.classifyAi({ fields, skipped, requestsRemaining: Math.max(0, limit - runNow.ai.requests) });
         aiAccepted = r.accepted;
@@ -276,9 +292,36 @@ export class RunManager {
       skipped.push(...mappedAi.skipped);
     }
 
+    // Phase 6: open-ended questions. The deterministic partition runs first; only answerable ones reach a model,
+    // and every answer is grounded before it can become an action. A failure here never stops the run.
+    let answers: RunRecord["answers"] = [];
+    if (this.deps.answerQuestions) {
+      this.assertActive(runId, tabId);
+      const limit = this.deps.aiRequestLimit ?? 6;
+      try {
+        const r = await this.deps.answerQuestions({ fields, skipped, profile, url: obs.url, requestsRemaining: Math.max(0, limit - ai.requests) });
+        const touched = new Set([...r.plan.map((p) => p.fieldId), ...r.results.map((x) => x.fieldId)]);
+        skipped = skipped.filter((x) => !touched.has(x.fieldId));
+        plan.push(...r.plan);
+        skipped.push(...r.results);
+        answers = r.answers;
+        // Only let this phase change the status when it actually used or failed the AI; "nothing to answer" says nothing.
+        const usedAi = r.requests > 0 || r.cacheHits + r.memoryHits > 0 || r.error !== null || r.plan.length > 0;
+        ai = {
+          ...ai,
+          status: !usedAi ? ai.status : ai.status === "unavailable" || r.status === "unavailable" ? "unavailable" : "used",
+          requests: ai.requests + r.requests,
+          cacheHits: ai.cacheHits + r.cacheHits + r.memoryHits,
+          error: ai.error ?? r.error,
+        };
+      } catch {
+        ai = { ...ai, status: "unavailable", error: ai.error ?? "unexpected" };
+      }
+    }
+
     let executed: { fieldId: string; executed: boolean; error: string | null }[] = [];
     let verified: { fieldId: string; verified: boolean; reason: string }[] = [];
-    await this.move(runId, tabId, "FILLING");
+    await this.move(runId, tabId, "FILLING", { ai, answers });
     if (plan.length > 0) {
       this.checkBudget(startedAt);
       const ex = await this.call(runId, tabId, { kind: "EXECUTE", plan });

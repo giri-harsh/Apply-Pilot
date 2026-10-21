@@ -25,9 +25,24 @@ export type ProviderMock = {
   gate?: Promise<void>;
   /** Called with each classification request's parsed fields. */
   onFields?: (fields: PromptField[]) => void;
+  /** Answer items for an answer-generation / regeneration / shortening request. Default: none. */
+  answers?: (payload: AnswerPayload, kind: "generation" | "regeneration" | "shortening", user: string) => unknown[];
 };
 
+export type AnswerPayload = {
+  job: { title: string | null; company: string | null; requiredSkills: string[] } | null;
+  questions: { id: string; category: string; question: string; length: string; evidenceIds: string[] }[];
+  evidence: { id: string; kind: string; text: string }[];
+};
+
+export type AnswerRequest = { provider: "gemini" | "groq"; kind: "generation" | "regeneration" | "shortening"; payload: AnswerPayload; user: string };
+
+export function answerItem(questionId: string, answer: string, evidenceIds: string[], extra: Record<string, unknown> = {}) {
+  return { questionId, answer, evidenceIds, claims: [], refusal: "none", ...extra };
+}
+
 export type MockAi = {
+  answerRequests: AnswerRequest[];
   calls: { gemini: number; groq: number };
   /** Raw request bodies, to assert on what leaves the browser. */
   bodies: { gemini: string[]; groq: string[] };
@@ -45,6 +60,7 @@ export const unknown = (fieldId: string) => item(fieldId, "unknown", "none", 0.1
 export async function installMockAi(context: BrowserContext): Promise<MockAi> {
   const mocks: Record<"gemini" | "groq", ProviderMock> = { gemini: {}, groq: {} };
   const state: MockAi = {
+    answerRequests: [],
     calls: { gemini: 0, groq: 0 },
     bodies: { gemini: [], groq: [] },
     connection: { gemini: true, groq: true },
@@ -71,6 +87,15 @@ export async function installMockAi(context: BrowserContext): Promise<MockAi> {
     let payload: unknown;
     if (user.includes('Return {"ok": true}')) {
       payload = { ok: state.connection[provider] };
+    } else if (user.startsWith("Write an answer for each question")) {
+      const parsed = JSON.parse(MARK.exec(user)![1]!) as AnswerPayload;
+      const kind: "generation" | "regeneration" | "shortening" = user.includes("rejected for these specific problems")
+        ? "regeneration"
+        : user.includes("over their length limit")
+          ? "shortening"
+          : "generation";
+      state.answerRequests.push({ provider, kind, payload: parsed, user });
+      payload = { answers: mock.answers ? mock.answers(parsed, kind, user) : [] };
     } else {
       const fields = (JSON.parse(MARK.exec(user)![1]!) as PromptField[]) ?? [];
       mock.onFields?.(fields);

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Open-ended questions</title></head>
+<body>
+<h1>Machine Learning Intern</h1>
+<div class="company-name">Northwind Analytics</div>
+<form id="app">
+  <h2>Personal Information</h2>
+  <label for="n">Full name</label><input id="n" name="n" type="text">
+  <label for="e">Email</label><input id="e" name="e" type="email">
+  <h2>Questions</h2>
+  <label for="why">Why do you want to join us? (max 60 words)</label>
+  <textarea id="why" name="why" rows="5"></textarea>
+  <div class="counter" id="why-count">0 / 60 words</div>
+  <label for="proj">Describe a relevant project</label>
+  <textarea id="proj" name="proj" rows="5" maxlength="400"></textarea>
+  <div class="counter" id="proj-count">0/400</div>
+  <button id="submit" type="submit">Submit Application</button>
+</form>
+<script src="/_common.js"></script>
+<script>
+  (function () {
+    function wire(id, counterId, fmt) {
+      var el = document.getElementById(id), c = document.getElementById(counterId);
+      function update() { c.textContent = fmt(el.value); }
+      el.addEventListener("input", update);
+    }
+    wire("why", "why-count", function (v) { var w = v.trim() === "" ? 0 : v.trim().split(/\s+/).length; return w + " / 60 words"; });
+    wire("proj", "proj-count", function (v) { return v.length + "/400"; });
+  })();
+</script>
+</body></html>

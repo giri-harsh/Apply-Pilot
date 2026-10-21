@@ -23,6 +23,7 @@ export function buildReport(
   let verifiedCount = 0;
   let failed = 0;
   let aiMapped = 0;
+  let aiWritten = 0;
   for (const p of plan) {
     const e = exec.get(p.fieldId);
     const v = ver.get(p.fieldId);
@@ -32,6 +33,7 @@ export function buildReport(
       required: p.required,
       semanticType: p.semanticType,
       ...(p.aiMapped ? { aiMapped: true } : {}),
+      ...(p.aiWritten ? { aiWritten: true, evidence: p.evidence ?? [] } : {}),
     };
     const dims = (execution: number | null, verification: number | null) => ({
       identification: p.confidence?.identification ?? 0,
@@ -49,6 +51,7 @@ export function buildReport(
     if (v?.verified) {
       verifiedCount++;
       if (p.aiMapped) aiMapped++;
+      if (p.aiWritten) aiWritten++;
       results.push({ ...base, outcome: "filled_verified", reason: v.reason, confidence: dims(1, 1) });
     } else {
       failed++;
@@ -69,6 +72,7 @@ export function buildReport(
     alreadyCorrect: count("already_correct"),
     requiredUnresolved: results.filter((r) => r.required && !["filled_verified", "already_correct"].includes(r.outcome)).length,
     aiMapped,
+    aiWritten,
     results,
   };
 }

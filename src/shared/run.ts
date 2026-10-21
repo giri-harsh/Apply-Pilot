@@ -15,6 +15,21 @@ export const RunRecordSchema = z.object({
   fieldsDiscovered: z.number().int().nonnegative().nullable(),
   resumeCount: z.number().int().nonnegative(),
   report: CompletionReportSchema.nullable(),
+  /** Answers written for this run, kept so the user can save one as a reusable answer after reviewing it. */
+  answers: z
+    .array(
+      z.object({
+        fieldId: z.string(),
+        label: z.string().max(300),
+        category: z.string().max(40),
+        text: z.string().max(4000),
+        evidence: z.array(z.string().max(200)).max(10),
+        signature: z.string().max(200),
+        source: z.enum(["generated", "memory", "cache"]),
+      }),
+    )
+    .max(20)
+    .default([]),
   /** What was detected about the job on the page; null when nothing could be read. */
   job: JobSummarySchema.nullable().default(null),
   /** AI usage for this run (SPEC 21.2 limits are enforced against `requests`). */

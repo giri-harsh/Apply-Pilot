@@ -1,3 +1,4 @@
+import { looksLikeInjection } from "@/job/sections";
 import { SENSITIVE_TYPES, type FieldResult, type FormField, type SemanticType } from "@/shared/form";
 
 /** Types the AI may never be asked about, whatever the label says (SPEC 14.5 / 17.2). */
@@ -30,6 +31,8 @@ export function selectCandidates(fields: FormField[], skipped: FieldResult[], ma
     if (f.control !== "select" && f.currentValue.trim() !== "") continue;
     if (f.ambiguous && !(f.ambiguityReason ?? "").startsWith("Conflicting signals")) continue; // duplicates cannot be resolved by a model
     if (!f.signals.some((s) => !/^(autocomplete|inputtype):/.test(s.text) && s.text.trim() !== "")) continue; // nothing to classify
+    // A label that tries to instruct the model is hostile page content: it is not sent at all (SPEC 20.3).
+    if (f.signals.some((s) => looksLikeInjection(s.text)) || looksLikeInjection(f.label)) continue;
     const understood = f.semanticType !== "unknown" && f.confidence >= 0.8 && !f.ambiguous;
     if (understood) continue; // the rules understood it; it was skipped for another reason (e.g. no profile value)
     eligible.push(f);

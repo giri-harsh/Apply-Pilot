@@ -8,6 +8,7 @@ import {
   type BackgroundResponse,
 } from "@/shared/messages";
 import { PROVIDER_IDS, type ProviderId } from "@/ai/config";
+import type { SavedAnswer } from "@/answers/storage";
 
 const send = (req: BackgroundRequest): Promise<BackgroundResponse> =>
   sendValidated((m) => chrome.runtime.sendMessage(m), BackgroundRequestSchema, BackgroundResponseSchema, req);
@@ -27,17 +28,28 @@ export function AiPanel() {
     const r = await send({ kind: "AI_GET_STATUS" });
     if (r.ok && "kind" in r && r.kind === "ai_status") setStatus(r.status);
   }, []);
+  const [saved, setSaved] = useState<SavedAnswer[]>([]);
+  const refreshSaved = useCallback(async () => {
+    const r = await send({ kind: "LIST_ANSWERS" });
+    if (r.ok && "kind" in r && r.kind === "answers") setSaved(r.answers);
+  }, []);
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+    void refreshSaved();
+  }, [refresh, refreshSaved]);
 
   const note = (k: string, v: string) => setNotes((n) => ({ ...n, [k]: v }));
 
   if (!status) return <p>Loading...</p>;
 
-  const saveSettings = async (aiEnabled: boolean, providerOrder: ProviderId[], jobEnrichment: boolean = status.jobEnrichment) => {
-    setStatus((s) => (s ? { ...s, aiEnabled, providerOrder, jobEnrichment, mode: !aiEnabled ? "off" : s.mode === "off" ? "ready" : s.mode } : s)); // optimistic
-    const r = await send({ kind: "AI_SET_SETTINGS", aiEnabled, providerOrder, jobEnrichment });
+  const saveSettings = async (
+    aiEnabled: boolean,
+    providerOrder: ProviderId[],
+    jobEnrichment: boolean = status.jobEnrichment,
+    answerMemory: boolean = status.answerMemory,
+  ) => {
+    setStatus((s) => (s ? { ...s, aiEnabled, providerOrder, jobEnrichment, answerMemory, mode: !aiEnabled ? "off" : s.mode === "off" ? "ready" : s.mode } : s)); // optimistic
+    const r = await send({ kind: "AI_SET_SETTINGS", aiEnabled, providerOrder, jobEnrichment, answerMemory });
     note("settings", r.ok ? "Saved" : "message" in r ? r.message : "Not saved");
     await refresh();
   };
@@ -85,6 +97,15 @@ export function AiPanel() {
         />{" "}
         Also use AI to find extra skills in job postings (off by default; the posting text is sent, skills must appear verbatim in it)
       </label>
+      <label>
+        <input
+          type="checkbox"
+          name="ai.answerMemory"
+          checked={status.answerMemory}
+          onChange={(e) => void saveSettings(status.aiEnabled, order, status.jobEnrichment, e.target.checked)}
+        />{" "}
+        Reuse answers I approved earlier when the question and job match (answers are only saved when you click "Save as reusable answer")
+      </label>
       <p data-testid="ai-mode" className="muted">
         Mode: {status.mode === "off" ? "Off" : status.mode === "not_configured" ? "Not configured (add a key)" : "Ready"}
       </p>
@@ -127,7 +148,18 @@ export function AiPanel() {
       <p className="muted">
         Requests logged: {status.usage.requests} (last: {status.usage.lastOutcome ?? "none"}). Cached field mappings: {status.cacheEntries}.
       </p>
-      <button data-testid="clear-cache" onClick={() => void send({ kind: "AI_CLEAR_CACHE" }).then(refresh)}>Clear mapping cache</button>
+      <button data-testid="clear-cache" onClick={() => void send({ kind: "AI_CLEAR_CACHE" }).then(refresh)}>Clear mapping and answer cache</button>
+
+      <h3>Saved reusable answers</h3>
+      {saved.length === 0 && <p className="muted" data-testid="no-saved-answers">None saved.</p>}
+      {saved.map((a) => (
+        <article key={a.id} data-testid="saved-answer" className="answer">
+          <strong>{a.questionText}</strong>
+          <p>{a.text}</p>
+          <p className="muted">{a.category} · {a.job.company ?? "any company"}</p>
+          <button className="danger" onClick={() => void send({ kind: "DELETE_ANSWER", id: a.id }).then(refreshSaved)}>Delete</button>
+        </article>
+      ))}
     </section>
   );
 }

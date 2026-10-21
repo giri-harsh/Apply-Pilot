@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LengthLimitSchema } from "../answers/limits";
 
 export const SEMANTIC_TYPES = [
   "full_name",
@@ -141,6 +142,8 @@ export const FormFieldSchema = z.object({
   fingerprint: z.string(),
   /** Custom widgets (combobox / autocomplete) need selection support, not typing. */
   widget: z.enum(["native", "combobox"]).default("native"),
+  /** Length limit detected from maxlength, nearby text or a live counter (SPEC 14.2). */
+  limit: LengthLimitSchema.nullable().default(null),
   /** Set only when an accepted AI mapping decided the semantic type (SPEC 9.5). */
   aiMapped: z.boolean().optional(),
 });
@@ -187,6 +190,10 @@ export const FieldResultSchema = z.object({
   /** Never contains the entered value. */
   semanticType: z.enum(SEMANTIC_TYPES),
   aiMapped: z.boolean().optional(),
+  /** An answer written by the model from profile evidence; always needs the user's review (SPEC 14). */
+  aiWritten: z.boolean().optional(),
+  /** Names of the evidence items behind a written answer (e.g. "Project: Sales Forecaster"). */
+  evidence: z.array(z.string().max(200)).max(10).optional(),
   /** SPEC 17.1: separate dimensions, never collapsed into one unexplained score. */
   confidence: z
     .object({
@@ -211,6 +218,7 @@ export const CompletionReportSchema = z.object({
   alreadyCorrect: z.number().int().nonnegative(),
   requiredUnresolved: z.number().int().nonnegative(),
   aiMapped: z.number().int().nonnegative().default(0),
+  aiWritten: z.number().int().nonnegative().default(0),
   results: z.array(FieldResultSchema),
 });
 export type CompletionReport = z.infer<typeof CompletionReportSchema>;

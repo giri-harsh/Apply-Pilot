@@ -1,6 +1,7 @@
 import type { ControlKind, FormField } from "@/shared/form";
 import { classifyField } from "../mapping/classify";
 import { isEnabled, isReadOnly, isVisible, normalizeText, textWithoutControls } from "./dom";
+import { detectLimit } from "./limit";
 import { displayedValue, isComboboxWidget, isCustomTrigger, listboxFor, optionElements, optionText } from "./widgets";
 import {
   collectLabelSignals,
@@ -173,6 +174,7 @@ export function observeForm(doc: Document): ObservedForm {
       risk: cls.risk,
       fingerprint: fingerprintOf(els, label),
       widget: isComboboxWidget(el) ? "combobox" : "native",
+      limit: kind === "textarea" || (kind === "text" && cls.semanticType === "open_ended") ? detectLimit(el, label) : null,
     });
     targets.set(fieldId, els);
   }

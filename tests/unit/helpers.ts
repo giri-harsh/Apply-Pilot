@@ -25,7 +25,7 @@ export function field(over: Partial<FormField> = {}): FormField {
     labelSource: "explicit_label", signals: [{ source: "explicit_label", text: "How can recruiters reach you electronically?" }],
     name: "contact1", elementId: "", autocomplete: "", placeholder: null, ariaLabel: null, required: false, visible: true, enabled: true,
     options: [], currentValue: "", sectionContext: "Contact", semanticCandidates: ["unknown"], semanticType: "unknown", confidence: 0,
-    ambiguous: false, ambiguityReason: null, risk: "moderate", fingerprint: "fp", widget: "native", ...over,
+    ambiguous: false, ambiguityReason: null, risk: "moderate", fingerprint: "fp", widget: "native", limit: null, ...over,
   };
 }
 

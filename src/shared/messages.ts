@@ -4,6 +4,7 @@ import { AgentActionSchema, FormFieldSchema, FieldResultSchema, PROFILE_KEYS, SE
 import { PROVIDER_IDS } from "../ai/config";
 import { RunRecordSchema } from "./run";
 import { JobContextSchema, JobSummarySchema } from "../job/schema";
+import { SavedAnswerSchema } from "../answers/storage";
 
 export const ErrorResponseSchema = z.object({
   ok: z.literal(false),
@@ -34,7 +35,12 @@ export const BackgroundRequestSchema = z.discriminatedUnion("kind", [
     aiEnabled: z.boolean(),
     providerOrder: z.array(ProviderIdSchema).min(1).max(2),
     jobEnrichment: z.boolean().optional(),
+    answerMemory: z.boolean().optional(),
   }),
+  // SPEC 19.3: an answer is saved for reuse only on an explicit click.
+  z.object({ kind: z.literal("SAVE_ANSWER"), tabId: z.number().int(), fieldId: z.string().max(20) }),
+  z.object({ kind: z.literal("LIST_ANSWERS") }),
+  z.object({ kind: z.literal("DELETE_ANSWER"), id: z.string().max(40) }),
   // The only message that carries a secret, and only inbound to the service worker.
   z.object({ kind: z.literal("AI_SET_KEY"), provider: ProviderIdSchema, secret: z.string().min(1).max(400) }),
   z.object({ kind: z.literal("AI_CLEAR_KEY"), provider: ProviderIdSchema }),
@@ -53,6 +59,7 @@ export const AiStatusSchema = z.object({
   usage: z.object({ requests: z.number().int(), lastOutcome: z.string().nullable() }),
   cacheEntries: z.number().int(),
   jobEnrichment: z.boolean(),
+  answerMemory: z.boolean(),
 });
 export type AiStatus = z.infer<typeof AiStatusSchema>;
 
@@ -65,6 +72,7 @@ export const BackgroundResponseSchema = z.union([
     result: z.object({ success: z.boolean(), provider: ProviderIdSchema, outcome: z.string().max(40), latencyMs: z.number().int().nullable() }),
   }),
   z.object({ ok: z.literal(true), kind: z.literal("ack") }),
+  z.object({ ok: z.literal(true), kind: z.literal("answers"), answers: z.array(SavedAnswerSchema) }),
   z.object({ ok: z.literal(true), kind: z.literal("job_preview"), job: JobSummarySchema.nullable() }),
   z.object({ ok: z.literal(false), kind: z.literal("rejected"), message: z.string().max(200) }),
   ErrorResponseSchema,
@@ -79,6 +87,8 @@ export const PlannedFillSchema = z.object({
   label: z.string(),
   required: z.boolean(),
   aiMapped: z.boolean().optional(),
+  aiWritten: z.boolean().optional(),
+  evidence: z.array(z.string().max(200)).max(10).optional(),
   confidence: z.object({ identification: z.number().min(0).max(1), mapping: z.number().min(0).max(1) }).optional(),
 });
 export type PlannedFill = z.infer<typeof PlannedFillSchema>;
