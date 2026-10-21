@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-e2e
+dist-portals
+test-results
+playwright-report
+.env*
+!.env.example
+.claude/settings.local.json
+*.log

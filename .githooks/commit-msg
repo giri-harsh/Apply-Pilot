@@ -1,0 +1,7 @@
+#!/bin/sh
+# Strip any AI-tool attribution lines from the commit message.
+f="$1"
+tmp="$f.tmp"
+grep -v -i -E 'co-authored-by:.*(claude|anthropic)|generated with.*claude|noreply@anthropic\.com' "$f" > "$tmp"
+mv "$tmp" "$f"
+exit 0
