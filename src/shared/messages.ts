@@ -5,6 +5,7 @@ import { PROVIDER_IDS } from "../ai/config";
 import { RunRecordSchema } from "./run";
 import { JobContextSchema, JobSummarySchema } from "../job/schema";
 import { SavedAnswerSchema } from "../answers/storage";
+import { PortalCaptureSchema } from "../diagnostics/schema";
 import { UploadContentRequestSchemas, UploadContentResponseSchemas } from "../resume/messages";
 
 export const ErrorResponseSchema = z.object({
@@ -50,6 +51,8 @@ export const BackgroundRequestSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("AI_TEST_CONNECTION"), provider: ProviderIdSchema }),
   z.object({ kind: z.literal("AI_CLEAR_CACHE") }),
   z.object({ kind: z.literal("PREVIEW_JOB"), tabId: z.number().int() }),
+  // Stores a redacted capture of the current page in the diagnostics namespace (user click only).
+  z.object({ kind: z.literal("CAPTURE_PAGE"), tabId: z.number().int() }),
 ]);
 export type BackgroundRequest = z.infer<typeof BackgroundRequestSchema>;
 
@@ -75,6 +78,7 @@ export const BackgroundResponseSchema = z.union([
     result: z.object({ success: z.boolean(), provider: ProviderIdSchema, outcome: z.string().max(40), latencyMs: z.number().int().nullable() }),
   }),
   z.object({ ok: z.literal(true), kind: z.literal("ack") }),
+  z.object({ ok: z.literal(true), kind: z.literal("captured"), captureId: z.string().max(64), fields: z.number().int(), controls: z.number().int() }),
   z.object({ ok: z.literal(true), kind: z.literal("answers"), answers: z.array(SavedAnswerSchema) }),
   z.object({ ok: z.literal(true), kind: z.literal("job_preview"), job: JobSummarySchema.nullable() }),
   z.object({ ok: z.literal(false), kind: z.literal("rejected"), message: z.string().max(200) }),
@@ -120,6 +124,8 @@ export const ContentRequestSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("DETECT_BLOCKERS") }),
   z.object({ kind: z.literal("NAVIGATE"), controlId: z.string().max(20), text: z.string().max(100) }),
   z.object({ kind: z.literal("CANCEL") }),
+  // Read-only, redacted structural snapshot of the page (portal capture); sent only on a user click or in "capture each step" mode.
+  z.object({ kind: z.literal("CAPTURE"), captureId: z.string().min(8).max(64), nowIso: z.string().datetime(), version: z.string().max(20), step: z.number().int().nullable() }),
   ...UploadContentRequestSchemas,
 ]);
 export type ContentRequest = z.infer<typeof ContentRequestSchema>;
@@ -181,6 +187,7 @@ export const ContentResponseSchema = z.union([
   z.object({ ok: z.literal(true), kind: z.literal("VERIFIED"), results: z.array(VerificationResultSchema) }),
   z.object({ ok: z.literal(true), kind: z.literal("JOB_EXTRACTED"), job: JobContextSchema }),
   z.object({ ok: z.literal(true), kind: z.literal("CANCELLED") }),
+  z.object({ ok: z.literal(true), kind: z.literal("CAPTURED"), capture: PortalCaptureSchema.omit({ lastRun: true }) }),
   ...UploadContentResponseSchemas,
   ErrorResponseSchema,
 ]);

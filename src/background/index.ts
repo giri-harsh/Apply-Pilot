@@ -16,6 +16,9 @@ import { getCachedJob } from "@/job/storage";
 import { JobService } from "./job-service";
 import { RunManager } from "./run-manager";
 import { ResumeService } from "./resume-service";
+import { DiagnosticsService } from "./diagnostics-service";
+import { createCaptureStore } from "@/diagnostics/store";
+import { DIAG_SETTINGS_KEY, DiagSettingsSchema } from "@/diagnostics/schema";
 import { chooseFileForField } from "@/content/upload/choose";
 import { OffscreenResponseSchema, ShortenRequestSchema } from "@/resume/offscreen-protocol";
 import { createResumeStore } from "@/resume/storage";
@@ -110,7 +113,24 @@ const resume = new ResumeService({
   newId: () => crypto.randomUUID(),
 });
 
+const diagnostics = new DiagnosticsService({
+  store: createCaptureStore(),
+  injectContent: async (tabId) => {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+  },
+  sendToTab,
+  loadProfile,
+  getRun: (tabId) => manager.get(tabId),
+  version: chrome.runtime.getManifest().version,
+  now: () => new Date(),
+  newId: () => crypto.randomUUID(),
+});
+
 const manager = new RunManager({
+  captureStep: async (tabId, stepIndex) => {
+    const raw = (await chrome.storage.local.get(DIAG_SETTINGS_KEY))[DIAG_SETTINGS_KEY];
+    if (DiagSettingsSchema.parse(raw ?? {}).captureEachStep) await diagnostics.capture(tabId, stepIndex, { inject: false });
+  },
   uploadResume: (input) => resume.uploadResume(input),
   getJob: (tabId, url) => jobs.forTab(tabId, url),
   loadRuns,
@@ -170,6 +190,14 @@ async function handle(req: BackgroundRequest): Promise<BackgroundResponse> {
       return { ok: true, kind: "ack" };
     case "AI_TEST_CONNECTION":
       return { ok: true, kind: "ai_test", result: await ai.testConnection(req.provider) };
+    case "CAPTURE_PAGE": {
+      try {
+        const c = await diagnostics.capture(req.tabId);
+        return { ok: true, kind: "captured", captureId: c.captureId, fields: c.fields.length, controls: c.controls.length };
+      } catch {
+        return { ok: false, kind: "rejected", message: "This page cannot be captured" };
+      }
+    }
     case "PREVIEW_JOB": {
       try {
         const tab = await chrome.tabs.get(req.tabId);

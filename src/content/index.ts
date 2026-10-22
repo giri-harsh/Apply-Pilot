@@ -18,6 +18,7 @@ import { classifyControls, pickNext } from "./navigation/classify";
 import { observeForm, type ObservedForm } from "./observer/observe";
 import { waitForStable } from "./stability";
 import { handleUpload } from "./upload";
+import { capturePage } from "./capture";
 import { verifyFill } from "./verification/verify";
 
 /**
@@ -121,6 +122,8 @@ async function handle(req: ContentRequest): Promise<ContentResponse> {
     case "CANCEL":
       setCancelled(true);
       return { ok: true, kind: "CANCELLED" };
+    case "CAPTURE":
+      return { ok: true, kind: "CAPTURED", capture: capturePage(document, location.href, { captureId: req.captureId, now: new Date(req.nowIso), version: req.version, step: req.step }) };
     case "UPLOAD_LIST":
     case "UPLOAD_BEGIN":
     case "UPLOAD_CHUNK":

@@ -54,6 +54,8 @@ export type UploadPhaseInput = {
 export type UploadPhaseResult = { results: FieldResult[]; resume: RunRecord["resume"]; notes: string[] };
 
 export interface RunDeps {
+  /** Diagnostics: capture the current step when the user turned "capture each step" on. Absent or failing never affects the run. */
+  captureStep?(tabId: number, stepIndex: number): Promise<void>;
   /** Resume tailoring and upload (Phase 7). Absent means file fields are only reported. */
   uploadResume?(input: UploadPhaseInput): Promise<UploadPhaseResult>;
   /** Grounded answers for open-ended questions (Phase 6). */
@@ -452,6 +454,8 @@ export class RunManager {
 
           // ---- blockers and unreadable frames are checked at the start of every step
           if (pass === 0) {
+            // "Capture each step" (diagnostics, off by default): a redacted snapshot of this step, stored locally. Never stops a run.
+            if (this.deps.captureStep) await this.deps.captureStep(tabId, stepIndex).catch(() => undefined);
             const det = await this.expect(runId, tabId, { kind: "DETECT_BLOCKERS" }, "BLOCKERS");
             if (det.blockers.length > 0) {
               const b = det.blockers[0]!;

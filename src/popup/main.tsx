@@ -138,6 +138,15 @@ function Popup() {
     else if (!r.ok) setError(r.message);
   };
 
+  // Portal capture: a redacted structural snapshot of this page, stored locally (Options > Diagnostics). Click only.
+  const [captureNote, setCaptureNote] = useState("");
+  const capture = async () => {
+    if (tabId === null) return;
+    setCaptureNote("Capturing...");
+    const r = await send({ kind: "CAPTURE_PAGE", tabId });
+    setCaptureNote(r.ok && "kind" in r && r.kind === "captured" ? `Captured ${r.fields} fields and ${r.controls} buttons. Find it in Settings > Diagnostics.` : !r.ok && "message" in r ? r.message : "Capture failed");
+  };
+
   // Per-origin site access (SPEC 20.1): requested only from this click, for exactly one origin, never a wildcard.
   const allowSite = async () => {
     if (tabId === null || !run) return;
@@ -223,6 +232,13 @@ function Popup() {
           Stop
         </button>
       </div>
+
+      <div className="buttons">
+        <button data-testid="capture-page" disabled={tabId === null} onClick={() => void capture()}>
+          Capture this page for adapter work
+        </button>
+      </div>
+      {captureNote && <p className="note" data-testid="capture-note" role="status">{captureNote}</p>}
 
       <section aria-live="polite">
         <p data-testid="status" data-state={run?.state ?? "IDLE"} className="status">
