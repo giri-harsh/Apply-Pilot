@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
@@ -22,10 +22,16 @@ if (!gemini && !groq) {
   process.exit(0);
 }
 
+// `pnpm test:live -- name` hands us a literal "--" before the filter; vitest would then treat the filter as a path after
+// the options end and run everything. Drop it so the filter works.
+const args = process.argv.slice(2).filter((a, i) => !(i === 0 && a === "--"));
+// A fresh call counter for every invocation (see tests/live/cap.ts). LIVE_MAX_CALLS (default 2) is the hard cap.
+mkdirSync(path.join(root, "test-results"), { recursive: true });
+writeFileSync(path.join(root, "test-results", "live-calls.count"), "0");
 const vitest = path.join(root, "node_modules", "vitest", "vitest.mjs");
-const res = spawnSync(process.execPath, [vitest, "run", "--config", "vitest.live.config.ts", ...process.argv.slice(2)], {
+const res = spawnSync(process.execPath, [vitest, "run", "--config", "vitest.live.config.ts", ...args], {
   cwd: root,
   stdio: "inherit",
-  env: { ...process.env, GEMINI_API_KEY: gemini, GROQ_API_KEY: groq },
+  env: { ...process.env, GEMINI_API_KEY: gemini, GROQ_API_KEY: groq, LIVE_MAX_CALLS: process.env.LIVE_MAX_CALLS ?? "2" },
 });
 process.exit(res.status ?? 1);

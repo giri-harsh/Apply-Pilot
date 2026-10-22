@@ -6,13 +6,14 @@ import { generateAnswers, type AnswerQuestion } from "@/answers/generate";
 import { classifyQuestion } from "@/answers/questions";
 import { JobContextSchema } from "@/job/schema";
 import { memoryStore } from "../unit/helpers";
+import { cappedFetch } from "./cap";
 import { richProfile } from "../fixtures/profile";
 
 const groq = process.env.GROQ_API_KEY ?? "";
 let calls = 0;
 const countingFetch = (u: string, i: RequestInit) => {
   calls++;
-  return fetch(u, i);
+  return cappedFetch(u, i);
 };
 
 /**

@@ -6,13 +6,14 @@ import { hashMaster } from "@/resume/hash";
 import { makeShortenTracked, tailorWithStats } from "@/resume/tailor";
 import { memoryStore } from "../unit/helpers";
 import { testProfile } from "../fixtures/profile";
+import { cappedFetch } from "./cap";
 import { jobFixture, masterFixture, variantFixture } from "../unit/resume-tailor/fixtures";
 
 const groq = process.env.GROQ_API_KEY ?? "";
 let calls = 0;
 const countingFetch = (u: string, i: RequestInit) => {
   calls++;
-  return fetch(u, i);
+  return cappedFetch(u, i);
 };
 
 /**
@@ -44,7 +45,8 @@ describe.skipIf(!groq)("live: resume tailoring (Groq)", () => {
     // Shorten the three longest bullets with the real model, validated against the master facts.
     const bullets = output.tailored.sections.flatMap((s) => s.entries.flatMap((e) => e.lines)).filter((l) => l.role === "bullet");
     const longest = [...bullets].sort((a, b) => b.text.length - a.text.length).slice(0, 3);
-    const shortenBudget = { remaining: run.calls.some((c) => c.ok) ? Number(process.env.REAL_SHORTEN_CALLS ?? 1) : 0 };
+    // LIVE_SHORTEN_ONLY=1 (with REAL_TAILOR_CALLS=0) spends the allowance on the shorten request alone.
+    const shortenBudget = { remaining: run.calls.some((c) => c.ok) || process.env.LIVE_SHORTEN_ONLY ? Number(process.env.REAL_SHORTEN_CALLS ?? 1) : 0 };
     const { fn, run: shortenRun } = makeShortenTracked({ master, job, ai, budget: shortenBudget });
     const shortened = await fn(longest, { reduceLines: 1, reason: "fit one page" });
     const shortenedCount = shortened.filter((l, i) => l.text !== longest[i]!.text).length;

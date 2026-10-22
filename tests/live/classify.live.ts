@@ -7,6 +7,7 @@ import { GroqProvider } from "@/ai/groq";
 import { loadUsage } from "@/ai/storage";
 import type { AIProvider } from "@/ai/types";
 import { field, memoryStore } from "../unit/helpers";
+import { cappedFetch } from "./cap";
 
 const gemini = process.env.GEMINI_API_KEY ?? "";
 const groq = process.env.GROQ_API_KEY ?? "";
@@ -16,7 +17,7 @@ let calls = 0;
 /** Counts every real network request; never logs URLs, headers or bodies (they contain keys / prompts). */
 const countingFetch = (u: string, i: RequestInit) => {
   calls++;
-  return fetch(u, i);
+  return cappedFetch(u, i); // throws before any network request once LIVE_MAX_CALLS is reached
 };
 
 /** One tiny classification call per provider that has a key. Real network, real quota (a few hundred tokens). */
