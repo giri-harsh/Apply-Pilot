@@ -13,7 +13,9 @@
     "test": "vitest run",
     "test:e2e": "node scripts/build.mjs --e2e && node scripts/build-portals.mjs && playwright test",
     "clean": "rimraf dist dist-e2e dist-portals test-results",
-    "test:live": "node scripts/test-live.mjs"
+    "test:live": "node scripts/test-live.mjs",
+    "metrics": "node scripts/metrics.mjs",
+    "package": "node scripts/package.mjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
@@ -26,6 +28,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.1",
     "@types/chrome": "^0.3.5",

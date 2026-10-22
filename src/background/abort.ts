@@ -7,8 +7,11 @@ export class Abort extends Error {
 }
 
 /** A run limit was reached (SPEC 21.2). The run stops as BLOCKED with this reason; it never loops on. */
+export const LIMIT_KINDS = ["duration", "actions", "retries", "passes", "steps", "fields"] as const;
+export type LimitKind = (typeof LIMIT_KINDS)[number];
+
 export class LimitReached extends Error {
-  constructor(readonly limit: "duration" | "actions" | "retries" | "passes" | "steps" | "fields", message: string) {
+  constructor(readonly limit: LimitKind, message: string) {
     super(message);
     this.name = "LimitReached";
   }

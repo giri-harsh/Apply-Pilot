@@ -302,7 +302,7 @@ function App() {
   };
 
   return (
-    <div className="wrap">
+    <main className="wrap">
       <h1>ApplyPilot AI - Profile vault</h1>
       <nav role="tablist">
         {TABS.map((t) => (
@@ -394,7 +394,7 @@ function App() {
           {flat.map((m, i) => <li key={i}>{m}</li>)}
         </ul>
       )}
-    </div>
+    </main>
   );
 }
 
