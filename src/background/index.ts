@@ -19,6 +19,7 @@ import { ResumeService } from "./resume-service";
 import { DiagnosticsService } from "./diagnostics-service";
 import { LearningService } from "@/learning/service";
 import { HistoryService } from "@/history/history";
+import { IndicatorService } from "./indicator-service";
 import { createCaptureStore } from "@/diagnostics/store";
 import { DIAG_SETTINGS_KEY, DiagSettingsSchema } from "@/diagnostics/schema";
 import { chooseFileForField } from "@/content/upload/choose";
@@ -132,7 +133,10 @@ const learning = new LearningService({ store: chromeStore(), now: () => Date.now
 
 const history = new HistoryService({ store: chromeStore(), loadProfile, now: () => Date.now() });
 
+const indicator = new IndicatorService({ store: chromeStore(), sendToTab });
+
 const manager = new RunManager({
+  onState: (run) => indicator.update(run),
   onFinished: (run) => history.record(run),
   learning,
   captureStep: async (tabId, stepIndex) => {
@@ -241,6 +245,15 @@ async function handle(req: BackgroundRequest): Promise<BackgroundResponse> {
 }
 
 chrome.runtime.onMessage.addListener((raw, sender, sendResponse) => {
+  // The in-page Stop button: the only thing a content script of this extension may ask, and it can only stop the run of ITS OWN tab.
+  if ((raw as { kind?: string } | null)?.kind === "INDICATOR_STOP") {
+    if (sender.id === chrome.runtime.id && sender.tab?.id !== undefined) {
+      void manager.stop(sender.tab.id).then(() => sendResponse({ ok: true, kind: "ack" }));
+      return true;
+    }
+    sendResponse({ ok: false, code: "UNTRUSTED_SENDER", message: "Rejected sender" });
+    return false;
+  }
   // Only the extension's own pages may drive runs; web pages and other extensions are rejected.
   if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(chrome.runtime.getURL(""))) {
     sendResponse({ ok: false, code: "UNTRUSTED_SENDER", message: "Rejected sender" });

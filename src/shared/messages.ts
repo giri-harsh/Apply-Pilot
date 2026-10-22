@@ -124,6 +124,15 @@ export const ContentRequestSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("DETECT_BLOCKERS") }),
   z.object({ kind: z.literal("NAVIGATE"), controlId: z.string().max(20), text: z.string().max(100) }),
   z.object({ kind: z.literal("CANCEL") }),
+  // In-page status indicator (SPEC 5.3): show or update the small status pill, or remove it. Carries a label and nothing else.
+  z.object({
+    kind: z.literal("INDICATOR"),
+    show: z.boolean(),
+    label: z.string().max(100),
+    tone: z.enum(["working", "done", "blocked"]),
+    canStop: z.boolean(),
+    autoHideMs: z.number().int().min(500).max(60000).nullable(),
+  }),
   // Read-only, redacted structural snapshot of the page (portal capture); sent only on a user click or in "capture each step" mode.
   z.object({ kind: z.literal("CAPTURE"), captureId: z.string().min(8).max(64), nowIso: z.string().datetime(), version: z.string().max(20), step: z.number().int().nullable() }),
   ...UploadContentRequestSchemas,
@@ -188,6 +197,7 @@ export const ContentResponseSchema = z.union([
   z.object({ ok: z.literal(true), kind: z.literal("VERIFIED"), results: z.array(VerificationResultSchema) }),
   z.object({ ok: z.literal(true), kind: z.literal("JOB_EXTRACTED"), job: JobContextSchema }),
   z.object({ ok: z.literal(true), kind: z.literal("CANCELLED") }),
+  z.object({ ok: z.literal(true), kind: z.literal("INDICATOR_OK") }),
   z.object({ ok: z.literal(true), kind: z.literal("CAPTURED"), capture: PortalCaptureSchema.omit({ lastRun: true }) }),
   ...UploadContentResponseSchemas,
   ErrorResponseSchema,

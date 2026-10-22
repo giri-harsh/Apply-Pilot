@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DIAG_SETTINGS_KEY, DiagSettingsSchema, type PortalCapture } from "@/diagnostics/schema";
 import { createCaptureStore, type CaptureSummary } from "@/diagnostics/store";
+import { INDICATOR_SETTINGS_KEY } from "@/indicator/labels";
 
 function saveJson(name: string, data: unknown) {
   // A blob anchor from the extension page: no "downloads" permission needed.
@@ -18,10 +19,12 @@ export function DiagnosticsPanel() {
   const [rows, setRows] = useState<CaptureSummary[]>([]);
   const [each, setEach] = useState(false);
   const [open, setOpen] = useState<PortalCapture | null>(null);
+  const [indicator, setIndicator] = useState(true);
 
   const refresh = useCallback(async () => {
     setRows(await store.list());
     setEach(DiagSettingsSchema.parse((await chrome.storage.local.get(DIAG_SETTINGS_KEY))[DIAG_SETTINGS_KEY] ?? {}).captureEachStep);
+    setIndicator(((await chrome.storage.local.get(INDICATOR_SETTINGS_KEY))[INDICATOR_SETTINGS_KEY] as { enabled?: boolean } | undefined)?.enabled !== false);
   }, [store]);
   useEffect(() => {
     void refresh();
@@ -29,6 +32,16 @@ export function DiagnosticsPanel() {
 
   return (
     <section data-testid="diagnostics">
+      <h2>In-page status indicator</h2>
+      <label>
+        <input
+          type="checkbox"
+          data-testid="indicator-toggle"
+          checked={indicator}
+          onChange={(e) => void chrome.storage.local.set({ [INDICATOR_SETTINGS_KEY]: { enabled: e.target.checked } }).then(refresh)}
+        />{" "}
+        Show a small status pill (with a Stop button) on the page during a run
+      </label>
       <h2>Portal captures</h2>
       <p>
         A capture is a redacted structural snapshot of an application step (labels, field types, buttons, page structure). It never contains what is typed

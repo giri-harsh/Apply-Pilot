@@ -19,6 +19,7 @@ import { observeForm, type ObservedForm } from "./observer/observe";
 import { waitForStable } from "./stability";
 import { handleUpload } from "./upload";
 import { capturePage } from "./capture";
+import { hideIndicator, showIndicator } from "./indicator";
 import { routePage } from "@/adapters/router";
 import type { PortalAdapter } from "@/adapters/types";
 import { verifyFill } from "./verification/verify";
@@ -130,6 +131,10 @@ async function handle(req: ContentRequest): Promise<ContentResponse> {
     case "CANCEL":
       setCancelled(true);
       return { ok: true, kind: "CANCELLED" };
+    case "INDICATOR":
+      if (req.show) showIndicator(document, { label: req.label, tone: req.tone, canStop: req.canStop, autoHideMs: req.autoHideMs }, () => void chrome.runtime.sendMessage({ kind: "INDICATOR_STOP" }).catch(() => undefined));
+      else hideIndicator();
+      return { ok: true, kind: "INDICATOR_OK" };
     case "CAPTURE":
       return { ok: true, kind: "CAPTURED", capture: capturePage(document, location.href, { captureId: req.captureId, now: new Date(req.nowIso), version: req.version, step: req.step }) };
     case "UPLOAD_LIST":

@@ -56,6 +56,8 @@ export type UploadPhaseInput = {
 export type UploadPhaseResult = { results: FieldResult[]; resume: RunRecord["resume"]; notes: string[] };
 
 export interface RunDeps {
+  /** Every state change, for the in-page status indicator. Never affects the run. */
+  onState?(run: RunRecord): Promise<void> | void;
   /** Application history (SPEC 19.1): called once a run reaches a final state. */
   onFinished?(run: RunRecord): Promise<void> | void;
   /** Learned strategies (Phase 8b): verified successes reused only on a matching page structure. Absent = no learning. */
@@ -150,6 +152,7 @@ export class RunManager {
     const next: RunRecord = { ...run, ...patch, state: to, updatedAt: at, history: [...run.history, { state: to, at }] };
     this.runs[key(tabId)] = next;
     await this.persist();
+    if (this.deps.onState) void Promise.resolve(this.deps.onState(next)).catch(() => undefined);
     // A run that reached a final state goes into the application history (never blocks or fails the run).
     // (READY_FOR_REVIEW is not "terminal" in the state machine, since the user may still complete or cancel, but the run is over.)
     if ((isTerminal(to) || to === "READY_FOR_REVIEW") && this.deps.onFinished) void Promise.resolve(this.deps.onFinished(next)).catch(() => undefined);
