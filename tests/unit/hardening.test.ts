@@ -22,9 +22,9 @@ describe("permission review (snapshot + documentation)", () => {
     expect(prod.externally_connectable).toBeUndefined();
   });
 
-  it("the test build differs only by the loopback host", () => {
+  it("the test build differs only by the loopback host and the .test names mapped to it", () => {
     expect(e2e.permissions).toEqual(prod.permissions);
-    expect(e2e.host_permissions.filter((h) => !prod.host_permissions.includes(h))).toEqual(["http://127.0.0.1/*"]);
+    expect(e2e.host_permissions.filter((h) => !prod.host_permissions.includes(h))).toEqual(["http://127.0.0.1/*", "http://*.test/*"]);
   });
 
   it("every permission and host pattern is justified in docs/PERMISSIONS.md", () => {

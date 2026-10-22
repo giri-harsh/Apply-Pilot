@@ -17,6 +17,7 @@ export function buildManifest({ e2e = false } = {}) {
     optional_host_permissions: ["https://*/*", "http://*/*"],
     minimum_chrome_version: "110",
   };
-  if (e2e) manifest.host_permissions.push("http://127.0.0.1/*");
+  // Test build only: loopback, and `.test` names that the e2e browser maps to loopback (the adapter hostname tests).
+  if (e2e) manifest.host_permissions.push("http://127.0.0.1/*", "http://*.test/*");
   return manifest;
 }

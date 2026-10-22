@@ -144,6 +144,8 @@ export const FormFieldSchema = z.object({
   widget: z.enum(["native", "combobox"]).default("native"),
   /** Length limit detected from maxlength, nearby text or a live counter (SPEC 14.2). */
   limit: LengthLimitSchema.nullable().default(null),
+  /** Id of the portal adapter whose hint decided this field's type (evidence only; the risk policy still applied). */
+  adapterHint: z.string().max(40).optional(),
   /** `accept` attribute of a file input ("" for everything else). Phase 7 uploads respect it. */
   accept: z.string().max(300).default(""),
   /** The field holds a value but the page currently shows a validation error for it (so "already correct" is not true). */

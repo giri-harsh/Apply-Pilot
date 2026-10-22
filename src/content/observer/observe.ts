@@ -1,5 +1,7 @@
 import type { ControlKind, FormField } from "@/shared/form";
-import { classifyField } from "../mapping/classify";
+import { applyFieldHint, hintForElement } from "@/adapters/router";
+import type { PortalAdapter } from "@/adapters/types";
+import { classifyField, riskFor } from "../mapping/classify";
 import { isEnabled, isReadOnly, isVisible, normalizeText, textWithoutControls } from "./dom";
 import { detectLimit } from "./limit";
 import { findValidationMessage } from "../verification/verify";
@@ -64,7 +66,7 @@ function optionLabelFor(el: HTMLInputElement): string {
   return wrap ? textWithoutControls(wrap) : el.value;
 }
 
-export function observeForm(doc: Document): ObservedForm {
+export function observeForm(doc: Document, opts?: { adapter?: PortalAdapter | null }): ObservedForm {
   const all = Array.from(doc.querySelectorAll<HTMLElement>("h1,h2,h3,h4,h5,h6,[role=heading],input,select,textarea,[role=combobox],[aria-haspopup=listbox]"));
   const targets = new Map<string, HTMLElement[]>();
   const fields: FormField[] = [];
@@ -144,6 +146,14 @@ export function observeForm(doc: Document): ObservedForm {
       section,
     );
 
+    // A portal adapter's hint is extra evidence only; the risk policy still decides (sensitive stays sensitive).
+    const hint = hintForElement(opts?.adapter ?? null, el);
+    const dec = hint ? applyFieldHint(cls, hint) : null;
+    const hinted = dec?.use === true;
+    const eff = hinted
+      ? { ...cls, semanticType: dec!.semanticType, confidence: dec!.confidence, candidates: [dec!.semanticType], ambiguous: false, ambiguityReason: null, risk: riskFor(dec!.semanticType, kind) }
+      : cls;
+
     const required =
       els.some((e) => (e as HTMLInputElement).required || e.getAttribute("aria-required") === "true") ||
       looksRequired(label);
@@ -167,12 +177,13 @@ export function observeForm(doc: Document): ObservedForm {
       options,
       currentValue,
       sectionContext: section,
-      semanticCandidates: cls.candidates,
-      semanticType: cls.semanticType,
-      confidence: cls.confidence,
-      ambiguous: cls.ambiguous,
-      ambiguityReason: cls.ambiguityReason,
-      risk: cls.risk,
+      semanticCandidates: eff.candidates,
+      semanticType: eff.semanticType,
+      confidence: eff.confidence,
+      ambiguous: eff.ambiguous,
+      ambiguityReason: eff.ambiguityReason,
+      risk: eff.risk,
+      ...(hinted ? { adapterHint: opts!.adapter!.id } : {}),
       fingerprint: fingerprintOf(els, label),
       widget: isComboboxWidget(el) ? "combobox" : "native",
       accept: kind === "file" ? (el.getAttribute("accept") ?? "").slice(0, 300) : "",

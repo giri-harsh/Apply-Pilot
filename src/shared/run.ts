@@ -18,6 +18,15 @@ export const ResumeRunInfoSchema = z.object({
 });
 export type ResumeRunInfo = z.infer<typeof ResumeRunInfoSchema>;
 
+/** Which path handled the page (SPEC 10.1): a recognised portal adapter, or the general agent, and why. */
+export const RouteSchema = z.object({
+  path: z.enum(["adapter", "general"]),
+  adapterId: z.string().max(40).nullable(),
+  adapterVersion: z.number().int().nullable(),
+  reason: z.string().max(300),
+});
+export type Route = z.infer<typeof RouteSchema>;
+
 export const RunRecordSchema = z.object({
   runId: z.string().min(8),
   tabId: z.number().int(),
@@ -60,6 +69,8 @@ export const RunRecordSchema = z.object({
     .default([]),
   /** Resume handling for this run (Phase 7): which variant, which generated or reused file, warnings, what was uploaded. */
   resume: ResumeRunInfoSchema.default({ status: "not_needed", variantId: null, variantAuto: false, documentId: null, filename: null, pageCount: null, warnings: [], uploaded: [], uploadVerified: false }),
+  /** The route chosen for the first observation of this run. */
+  route: RouteSchema.nullable().default(null),
   /** The user's per-run variant choice (null = automatic). */
   variantOverride: z.string().max(80).nullable().default(null),
   /** What was detected about the job on the page; null when nothing could be read. */

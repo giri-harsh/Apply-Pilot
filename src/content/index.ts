@@ -19,6 +19,8 @@ import { observeForm, type ObservedForm } from "./observer/observe";
 import { waitForStable } from "./stability";
 import { handleUpload } from "./upload";
 import { capturePage } from "./capture";
+import { routePage } from "@/adapters/router";
+import type { PortalAdapter } from "@/adapters/types";
 import { verifyFill } from "./verification/verify";
 
 /**
@@ -30,6 +32,7 @@ type Guarded = typeof globalThis & { __applypilotLoaded?: boolean };
 const g = globalThis as Guarded;
 
 let observed: ObservedForm | null = null;
+let adapter: PortalAdapter | null = null;
 let controls: Map<string, HTMLElement> = new Map();
 
 function ctx(): ExecContext {
@@ -49,8 +52,13 @@ async function handle(req: ContentRequest): Promise<ContentResponse> {
       return { ok: true, kind: "PONG" };
     case "OBSERVE":
       setCancelled(false);
-      observed = observeForm(document);
-      return { ok: true, kind: "OBSERVED", url: location.href, pageTitle: document.title, fields: observed.fields };
+      {
+        // Router: adapter path only when host, page signals and structure all match; otherwise the general agent.
+        const routed = routePage(document, location.href);
+        adapter = routed.adapter;
+        observed = observeForm(document, { adapter });
+        return { ok: true, kind: "OBSERVED", url: location.href, pageTitle: document.title, fields: observed.fields, route: routed.decision };
+      }
     case "EXTRACT_JOB":
       return { ok: true, kind: "JOB_EXTRACTED", job: extractJob(document, location.href, { maxChars: req.maxChars }) };
     case "MAP": {
@@ -96,7 +104,7 @@ async function handle(req: ContentRequest): Promise<ContentResponse> {
       return { ok: true, kind: "STABLE", ...r };
     }
     case "CLASSIFY_CONTROLS": {
-      const { report, elements } = classifyControls(document);
+      const { report, elements } = classifyControls(document, adapter);
       controls = elements;
       return { ok: true, kind: "CONTROLS", ...report, next: pickNext(report) };
     }
@@ -108,7 +116,7 @@ async function handle(req: ContentRequest): Promise<ContentResponse> {
       const el = controls.get(req.controlId);
       if (!el || !el.isConnected) return { ok: true, kind: "NAVIGATED", clicked: false, changed: false, reason: "The control is no longer on the page" };
       // Re-classify at execution time: the page may have changed since the harness looked.
-      const fresh = classifyControls(document);
+      const fresh = classifyControls(document, adapter);
       const next = pickNext(fresh.report);
       if (!next || fresh.elements.get(next.id) !== el || next.text !== req.text) {
         return { ok: true, kind: "NAVIGATED", clicked: false, changed: false, reason: "The control is no longer a safe next-step control" };

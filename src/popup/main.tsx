@@ -247,6 +247,11 @@ function Popup() {
         {run?.fieldsDiscovered !== null && run?.fieldsDiscovered !== undefined && (
           <p data-testid="discovered">Fields found: {run.fieldsDiscovered}</p>
         )}
+        {run?.route && (
+          <p data-testid="route" data-path={run.route.path} className="note">
+            {run.route.path === "adapter" ? `Portal adapter: ${run.route.adapterId} v${run.route.adapterVersion}` : "General agent (no portal adapter)"}
+          </p>
+        )}
         {run?.reason && <p data-testid="reason">{run.reason}</p>}
         {run?.state === "BLOCKED" && run.needsPermission && (
           <div>

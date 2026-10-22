@@ -1,3 +1,4 @@
+import type { PortalAdapter } from "@/adapters/types";
 import { isEnabled, isVisible, normalizeText } from "../observer/dom";
 
 /**
@@ -87,7 +88,7 @@ function classifyOne(el: HTMLElement, ctx: { lastStep: boolean; review: boolean 
 }
 
 /** Classifies every visible, enabled action control. Read-only. */
-export function classifyControls(doc: Document): { report: ControlsReport; elements: Map<string, HTMLElement> } {
+export function classifyControls(doc: Document, adapter: PortalAdapter | null = null): { report: ControlsReport; elements: Map<string, HTMLElement> } {
   const indicator = findStepIndicator(doc);
   const review = hasReviewSummary(doc);
   const lastStep = indicator !== null && indicator.current >= indicator.total;
@@ -98,7 +99,12 @@ export function classifyControls(doc: Document): { report: ControlsReport; eleme
   const controls: ControlInfo[] = els.map((el, i) => {
     const id = `ctl_${String(i + 1).padStart(3, "0")}`;
     elements.set(id, el);
-    const c = classifyOne(el, { lastStep, review });
+    let c = classifyOne(el, { lastStep, review });
+    // A portal adapter may say "this unrecognised button is the Next button". It can never change a control that is final for
+    // a stated reason (final wording, a posting form, a review page, the last step): only the "unsure" case.
+    if (c.role === "final" && c.reasons[0]?.startsWith("unrecognised") && adapter?.strategies.nextHints.some((h) => el.matches(h.selector))) {
+      c = { role: "next", reasons: [`adapter hint (${adapter.id})`] };
+    }
     return { id, text: textOf(el).slice(0, 80), role: c.role, reasons: c.reasons };
   });
   return { report: { controls, isLastStep: lastStep, hasReviewSummary: review, stepIndicator: indicator }, elements };

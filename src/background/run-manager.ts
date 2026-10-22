@@ -191,6 +191,7 @@ export class RunManager {
         permissionOrigin: null,
         resume: { status: "not_needed", variantId: null, variantAuto: false, documentId: null, filename: null, pageCount: null, warnings: [], uploaded: [], uploadVerified: false },
         variantOverride: opts.variantId ?? null,
+        route: null,
         reason: null,
         ai: { status: "off", requests: 0, cacheHits: 0, accepted: 0, provider: null, error: null },
       };
@@ -447,6 +448,8 @@ export class RunManager {
           // ---- observe
           const obs = await this.expect(runId, tabId, { kind: "OBSERVE" }, "OBSERVED");
           stepUrl = obs.url;
+          // Which path handled this page: recorded for the first observation of the run (and when it changes between steps).
+          if (obs.route && (cur().route?.path !== obs.route.path || cur().route?.adapterId !== obs.route.adapterId)) await this.update(runId, tabId, { route: obs.route });
           stepTitle = obs.pageTitle;
           const visible = obs.fields.filter((f) => f.visible);
           stepFields = Math.max(stepFields, visible.length);

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { UserProfileSchema } from "./profile";
 import { AgentActionSchema, FormFieldSchema, FieldResultSchema, PROFILE_KEYS, SEMANTIC_TYPES } from "./form";
 import { PROVIDER_IDS } from "../ai/config";
-import { RunRecordSchema } from "./run";
+import { RouteSchema, RunRecordSchema } from "./run";
 import { JobContextSchema, JobSummarySchema } from "../job/schema";
 import { SavedAnswerSchema } from "../answers/storage";
 import { PortalCaptureSchema } from "../diagnostics/schema";
@@ -159,6 +159,7 @@ export const ContentResponseSchema = z.union([
     url: z.string(),
     pageTitle: z.string(),
     fields: z.array(FormFieldSchema),
+    route: RouteSchema.optional(),
   }),
   z.object({
     ok: z.literal(true),

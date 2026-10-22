@@ -18,6 +18,13 @@ export function portalUrl(name: string): string {
   return `${base}/${name}.html`;
 }
 
+/** The same portal served under another hostname (`*.test` is mapped to loopback by the test browser). */
+export function portalUrlOnHost(host: string, name: string): string {
+  const base = process.env.PORTAL_BASE_URL;
+  if (!base) throw new Error("PORTAL_BASE_URL not set (global setup did not run)");
+  return `http://${host}:${new URL(base).port}/${name}.html`;
+}
+
 export function freshUserDataDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "applypilot-pw-"));
 }
@@ -31,7 +38,8 @@ export async function launchExtension(userDataDir = freshUserDataDir()): Promise
   const context = await chromium.launchPersistentContext(userDataDir, {
     channel: "chromium",
     headless: true,
-    args: [`--disable-extensions-except=${EXTENSION_DIR}`, `--load-extension=${EXTENSION_DIR}`],
+    // `*.test` names resolve to loopback, so tests can exercise hostname rules (adapters, lookalike hosts) on local portals.
+    args: [`--disable-extensions-except=${EXTENSION_DIR}`, `--load-extension=${EXTENSION_DIR}`, "--host-resolver-rules=MAP *.test 127.0.0.1"],
   });
   let [worker] = context.serviceWorkers();
   worker ??= await context.waitForEvent("serviceworker");

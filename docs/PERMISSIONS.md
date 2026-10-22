@@ -31,3 +31,5 @@ After a click that makes the page reload, the service worker listens to `chrome.
 - Options > Site access lists the origins the user granted (the AI API hosts and the test build's loopback are not listed) with a Revoke button for each, which removes exactly that one origin.
 - The production `host_permissions` stay the two AI API origins.
 - Needs user verification: clicking the real Chrome confirmation bubble cannot be automated. Tests stub `chrome.permissions.request` to check the exact payload and both answers (granted and denied).
+
+The test build also lists `http://*.test/*` (names the e2e browser maps to loopback via `--host-resolver-rules`, used by the adapter hostname tests). Never ship `dist-e2e`.
