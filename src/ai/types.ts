@@ -9,7 +9,10 @@ export type AIRequestCategory =
   | "job_enrichment"
   | "answer_generation"
   | "answer_regeneration"
-  | "answer_shortening";
+  | "answer_shortening"
+  | "resume_rewrite"
+  | "resume_shortening"
+  | "cover_letter";
 
 export interface StructuredRequest<T> {
   category: AIRequestCategory;

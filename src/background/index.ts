@@ -15,6 +15,12 @@ import { AiService } from "./ai-service";
 import { getCachedJob } from "@/job/storage";
 import { JobService } from "./job-service";
 import { RunManager } from "./run-manager";
+import { ResumeService } from "./resume-service";
+import { chooseFileForField } from "@/content/upload/choose";
+import { OffscreenResponseSchema, ShortenRequestSchema } from "@/resume/offscreen-protocol";
+import { createResumeStore } from "@/resume/storage";
+import { makeShorten, tailor } from "@/resume/tailor";
+import { defaultVariants, selectVariant } from "@/resume/variants";
 import type { Scheduler } from "./scheduler";
 
 // Keep API keys, settings and caches out of reach of content scripts (they run in web pages' processes).
@@ -71,7 +77,40 @@ function waitForTabLoad(tabId: number, previousUrl: string, timeoutMs: number, s
   });
 }
 
+/** One hidden document does the PDF work (SPEC 7.6); created on demand. */
+async function ensureOffscreen(): Promise<void> {
+  const existing = await chrome.runtime.getContexts({ contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT] });
+  if (existing.length > 0) return;
+  await chrome.offscreen.createDocument({
+    url: "offscreen.html",
+    reasons: [chrome.offscreen.Reason.BLOBS, chrome.offscreen.Reason.WORKERS],
+    justification: "Lay out and validate the tailored resume PDF",
+  });
+}
+
+const resume = new ResumeService({
+  store: createResumeStore(),
+  loadProfile,
+  loadJob: (url) => getCachedJob(chromeStore(), url),
+  getAi: () => ai.resumeAi(),
+  tailor,
+  selectVariant,
+  defaultVariants,
+  makeShorten,
+  chooseFile: chooseFileForField,
+  sendToTab,
+  async build(req) {
+    await ensureOffscreen();
+    const raw: unknown = await chrome.runtime.sendMessage(req);
+    const parsed = OffscreenResponseSchema.safeParse(raw);
+    return parsed.success ? parsed.data : { ok: false, message: "The document builder did not answer" };
+  },
+  now: () => new Date(),
+  newId: () => crypto.randomUUID(),
+});
+
 const manager = new RunManager({
+  uploadResume: (input) => resume.uploadResume(input),
   getJob: (tabId, url) => jobs.forTab(tabId, url),
   loadRuns,
   saveRuns,
@@ -102,7 +141,7 @@ async function handle(req: BackgroundRequest): Promise<BackgroundResponse> {
   await ready;
   switch (req.kind) {
     case "START_RUN": {
-      const r = await manager.start(req.tabId);
+      const r = await manager.start(req.tabId, { variantId: req.variantId ?? null });
       return r.ok ? { ok: true, run: r.run } : r;
     }
     case "STOP_RUN": {
@@ -169,6 +208,18 @@ chrome.runtime.onMessage.addListener((raw, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(chrome.runtime.getURL(""))) {
     sendResponse({ ok: false, code: "UNTRUSTED_SENDER", message: "Rejected sender" });
     return false;
+  }
+  // Requests meant for the offscreen document are not ours to answer.
+  if ((raw as { target?: string } | null)?.target === "offscreen") return false;
+  // The offscreen document asks for shorter resume wording; the service worker owns every AI call.
+  if ((raw as { kind?: string } | null)?.kind === "RESUME_SHORTEN") {
+    const req = ShortenRequestSchema.safeParse(raw);
+    if (!req.success) {
+      sendResponse({ ok: true, lines: [] });
+      return false;
+    }
+    void resume.shorten(req.data.sessionId, req.data.lines, req.data.target).then((lines) => sendResponse({ ok: true, lines }));
+    return true;
   }
   void handleValidated(raw, BackgroundRequestSchema, BackgroundResponseSchema, handle).then(sendResponse);
   return true;

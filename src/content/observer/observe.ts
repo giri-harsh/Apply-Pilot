@@ -175,6 +175,7 @@ export function observeForm(doc: Document): ObservedForm {
       risk: cls.risk,
       fingerprint: fingerprintOf(els, label),
       widget: isComboboxWidget(el) ? "combobox" : "native",
+      accept: kind === "file" ? (el.getAttribute("accept") ?? "").slice(0, 300) : "",
       invalid: currentValue.trim() !== "" && findValidationMessage(el) !== null,
       limit: kind === "textarea" || (kind === "text" && cls.semanticType === "open_ended") ? detectLimit(el, label) : null,
     });

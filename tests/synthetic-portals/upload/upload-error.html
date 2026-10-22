@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Resume upload - error</title></head>
+<body>
+<h1>Apply to Strict Inc</h1>
+<form id="f">
+  <div class="row">
+    <label for="resume">Resume</label>
+    <input type="file" id="resume" name="resume">
+    <span id="status" data-state="empty">No file attached</span>
+    <div id="err" class="error" role="alert" hidden></div>
+  </div>
+</form>
+<script src="/_common.js"></script>
+<script>
+  const input = document.getElementById("resume");
+  input.addEventListener("change", () => {
+    if (!input.files[0]) return;
+    setTimeout(() => {
+      input.setAttribute("aria-invalid", "true");
+      input.setAttribute("aria-describedby", "err");
+      const e = document.getElementById("err");
+      e.textContent = "Upload failed: this file could not be read";
+      e.hidden = false;
+      document.getElementById("status").dataset.state = "error";
+    }, 80);
+  });
+</script>
+</body></html>

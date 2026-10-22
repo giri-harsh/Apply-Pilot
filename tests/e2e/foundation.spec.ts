@@ -35,10 +35,11 @@ test("Phase 1: extension loads unpacked and Quick Apply inspects a synthetic for
   expect(await page.evaluate(() => (window as unknown as { __submitted: boolean }).__submitted)).toBe(false);
 });
 
-test("Phase 1/4: production manifest requests only activeTab, scripting, storage and the two AI API origins", async () => {
+test("Phase 1/4/7: production manifest requests only activeTab, scripting, storage, offscreen and the two AI API origins", async () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "dist", "manifest.json"), "utf8"));
   expect(manifest.manifest_version).toBe(3);
-  expect(manifest.permissions.sort()).toEqual(["activeTab", "scripting", "storage"]);
+  // "offscreen" (Phase 7) hosts the PDF builder; see docs/PERMISSIONS.md. Host access beyond the AI origins is optional only.
+  expect(manifest.permissions.sort()).toEqual(["activeTab", "offscreen", "scripting", "storage"]);
   expect(manifest.host_permissions.sort()).toEqual(["https://api.groq.com/*", "https://generativelanguage.googleapis.com/*"]);
   expect(manifest.content_scripts).toBeUndefined();
 });

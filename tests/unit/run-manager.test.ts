@@ -16,6 +16,8 @@ type Def = {
   after?: string[];
   /** The profile has no value for it. */
   unfillable?: boolean;
+  /** A file input: the mapper leaves it to the resume upload step. */
+  file?: boolean;
   /** Number of executions that fail with "disabled" before it works. */
   disabledFor?: number;
   /** Number of verifications that fail (a validation error) before one passes. */
@@ -73,10 +75,10 @@ class FakePage {
 
   private fieldOf(d: Def, i: number): FormField {
     return {
-      fieldId: `field_${String(i + 1).padStart(3, "0")}`, tagName: "input", inputType: "text", control: "text", label: d.label, labelSource: "explicit_label",
+      fieldId: `field_${String(i + 1).padStart(3, "0")}`, tagName: "input", inputType: d.file ? "file" : "text", control: d.file ? "file" : "text", label: d.label, labelSource: "explicit_label",
       signals: [], name: d.key, elementId: "", autocomplete: "", placeholder: null, ariaLabel: null, required: Boolean(d.required), visible: true, enabled: true,
       options: [], currentValue: this.filled.has(d.key) ? "x" : "", sectionContext: "", semanticCandidates: [d.type], semanticType: d.type, confidence: 0.99,
-      ambiguous: false, ambiguityReason: null, risk: "low", fingerprint: `s${this.step}:${d.key}`, widget: "native", limit: null, invalid: false,
+      ambiguous: false, ambiguityReason: null, risk: "low", fingerprint: `s${this.step}:${d.key}`, widget: "native", limit: null, invalid: false, accept: "",
     };
   }
 
@@ -97,7 +99,8 @@ class FakePage {
         defs.forEach((d, i) => {
           const f = this.fieldOf(d, i);
           const base = { fieldId: f.fieldId, label: d.label, required: Boolean(d.required), semanticType: d.type, fingerprint: f.fingerprint };
-          if (this.filled.has(d.key)) skipped.push({ ...base, outcome: "already_correct", reason: "Field already holds the profile value" });
+          if (d.file) skipped.push({ ...base, outcome: "unresolved", reason: "File field: handled by the resume upload step" });
+          else if (this.filled.has(d.key)) skipped.push({ ...base, outcome: "already_correct", reason: "Field already holds the profile value" });
           else if (d.unfillable) skipped.push({ ...base, outcome: "unresolved", reason: "Profile has no value for this field" });
           else plan.push({ ...base, action: { type: "fill_text", fieldId: f.fieldId, value: "v" } });
         });
@@ -548,6 +551,79 @@ describe("RunManager: blockers, frames and navigation", () => {
     await mgr.start(1);
     await until(mgr, 1, final);
     expect((await mgr.get(1))!.reason).toMatch(/did not respond after moving/);
+  });
+});
+
+describe("RunManager: resume upload phase", () => {
+  const resumeField: Def = { key: "cv", label: "Resume", type: "unknown", required: true, file: true };
+  const idle = { status: "not_needed" as const, variantId: null, variantAuto: false, documentId: null, filename: null, pageCount: null, warnings: [], uploaded: [], uploadVerified: false };
+
+  it("hands the visible file fields of the final observation to the upload step and merges its verified result", async () => {
+    const page = new FakePage(single([email, resumeField]));
+    const seen: string[][] = [];
+    const { mgr } = setup(page, {
+      uploadResume: async (i) => {
+        seen.push(i.fields.map((f) => f.label));
+        return {
+          results: i.fields.map((f) => ({ fieldId: f.fieldId, label: f.label, outcome: "filled_verified" as const, required: f.required, reason: "Upload recognized", semanticType: f.semanticType, fingerprint: f.fingerprint, executed: true })),
+          resume: { ...idle, status: "tailored", filename: "A_B_Resume_2026-10-22.pdf", uploaded: i.fields.map((f) => f.fingerprint) },
+          notes: [],
+        };
+      },
+    });
+    await mgr.start(1, { variantId: "v-ml" });
+    await until(mgr, 1, final);
+    const run = (await mgr.get(1))!;
+    expect(seen).toEqual([["Resume"]]);
+    expect(run.state).toBe("READY_FOR_REVIEW");
+    expect(run.report!.requiredUnresolved).toBe(0);
+    expect(run.report!.results.find((r) => r.label === "Resume")).toMatchObject({ outcome: "filled_verified" });
+    expect(run.resume).toMatchObject({ status: "tailored", filename: "A_B_Resume_2026-10-22.pdf" });
+    expect(run.variantOverride).toBe("v-ml");
+  });
+
+  it("after a verified upload the page is observed again, so a site that rewrites fields while parsing the resume is noticed and repaired", async () => {
+    const page = new FakePage(single([email, resumeField]));
+    let uploaded = false;
+    const { mgr } = setup(page, {
+      uploadResume: async (i) => {
+        uploaded = true;
+        page.filled.delete("email"); // the portal parsed the resume and cleared the email it had accepted
+        return {
+          results: i.fields.map((f) => ({ fieldId: f.fieldId, label: f.label, outcome: "filled_verified" as const, required: f.required, reason: "ok", semanticType: f.semanticType, fingerprint: f.fingerprint, executed: true })),
+          resume: { ...idle, status: "tailored", uploadVerified: true, uploaded: i.fields.map((f) => f.fingerprint) },
+          notes: [],
+        };
+      },
+    });
+    await mgr.start(1);
+    await until(mgr, 1, final);
+    const run = (await mgr.get(1))!;
+    expect(uploaded).toBe(true);
+    expect(page.filled.has("email")).toBe(true); // refilled after the upload
+    expect(page.executeBatches).toHaveLength(2); // before and after the upload
+    expect(run.report!.results.find((r) => r.label === "Email")).toMatchObject({ outcome: "filled_verified" });
+    expect(run.resume.uploadVerified).toBe(true);
+  });
+
+  it("without an upload step, or when it skips, a required file field is honestly unresolved and the run does not advance", async () => {
+    const page = new FakePage({ steps: [{ fields: [email, resumeField], next: "Next" }, { fields: [] }] });
+    const { mgr } = setup(page);
+    await mgr.start(1);
+    await until(mgr, 1, final);
+    const run = (await mgr.get(1))!;
+    expect(run.report!.requiredUnresolved).toBe(1);
+    expect(page.navigateCalls).toBe(0);
+  });
+
+  it("a throwing upload step never fails the run", async () => {
+    const page = new FakePage(single([email, resumeField]));
+    const { mgr } = setup(page, { uploadResume: async () => { throw new Error("boom"); } });
+    await mgr.start(1);
+    await until(mgr, 1, final);
+    const run = (await mgr.get(1))!;
+    expect(run.state).toBe("READY_FOR_REVIEW");
+    expect(run.notes.join(" ")).toMatch(/upload the file yourself/);
   });
 });
 

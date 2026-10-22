@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Two resume inputs</title></head>
+<body>
+<h1>Apply to Twin Corp</h1>
+<form id="f">
+  <div class="row"><label for="r1">Resume</label><input type="file" id="r1" name="resume1"><span class="st" data-state="empty"></span></div>
+  <div class="row"><label for="r2">CV</label><input type="file" id="r2" name="resume2"><span class="st" data-state="empty"></span></div>
+</form>
+<script src="/_common.js"></script>
+<script>
+  for (const i of document.querySelectorAll("input[type=file]")) {
+    i.addEventListener("change", () => {
+      const s = i.parentElement.querySelector(".st");
+      s.textContent = "Attached: " + i.files[0].name;
+      s.dataset.state = "attached";
+    });
+  }
+</script>
+</body></html>

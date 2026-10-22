@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Resume and cover letter</title></head>
+<body>
+<h1>Apply to Twofile Ltd</h1>
+<form id="f">
+  <div class="row">
+    <label for="resume">Resume</label>
+    <input type="file" id="resume" name="resume" required>
+    <span id="status-resume" data-state="empty">No file attached</span>
+  </div>
+  <div class="row">
+    <label for="cover">Cover letter (optional)</label>
+    <input type="file" id="cover" name="cover_letter">
+    <span id="status-cover" data-state="empty">No file attached</span>
+  </div>
+  <button type="submit" id="final">Submit application</button>
+</form>
+<script src="/_common.js"></script>
+<script>
+  window.__uploads = [];
+  for (const [id, st] of [["resume", "status-resume"], ["cover", "status-cover"]]) {
+    document.getElementById(id).addEventListener("change", (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      window.__uploads.push({ field: id, name: f.name });
+      const s = document.getElementById(st);
+      s.textContent = "Attached: " + f.name;
+      s.dataset.state = "attached";
+    });
+  }
+</script>
+</body></html>

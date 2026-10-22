@@ -3,6 +3,21 @@ import { RUN_STATES } from "./state-machine";
 import { CompletionReportSchema, FieldResultSchema, StepSummarySchema } from "./form";
 import { JobSummarySchema } from "../job/schema";
 
+export const ResumeRunInfoSchema = z.object({
+  status: z.enum(["not_needed", "off", "none", "tailored", "reused", "failed"]),
+  variantId: z.string().max(80).nullable(),
+  variantAuto: z.boolean(),
+  documentId: z.string().max(80).nullable(),
+  filename: z.string().max(200).nullable(),
+  pageCount: z.number().int().nullable(),
+  warnings: z.array(z.string().max(300)).max(10),
+  /** Fingerprints of file fields already uploaded to in this run, so recovery never uploads twice. */
+  uploaded: z.array(z.string().max(300)).max(10),
+  /** True only after the page recognised an uploaded file. "Prepared" is not "uploaded". */
+  uploadVerified: z.boolean().default(false),
+});
+export type ResumeRunInfo = z.infer<typeof ResumeRunInfoSchema>;
+
 export const RunRecordSchema = z.object({
   runId: z.string().min(8),
   tabId: z.number().int(),
@@ -43,6 +58,10 @@ export const RunRecordSchema = z.object({
     )
     .max(20)
     .default([]),
+  /** Resume handling for this run (Phase 7): which variant, which generated or reused file, warnings, what was uploaded. */
+  resume: ResumeRunInfoSchema.default({ status: "not_needed", variantId: null, variantAuto: false, documentId: null, filename: null, pageCount: null, warnings: [], uploaded: [], uploadVerified: false }),
+  /** The user's per-run variant choice (null = automatic). */
+  variantOverride: z.string().max(80).nullable().default(null),
   /** What was detected about the job on the page; null when nothing could be read. */
   job: JobSummarySchema.nullable().default(null),
   /** AI usage for this run (SPEC 21.2 limits are enforced against `requests`). */

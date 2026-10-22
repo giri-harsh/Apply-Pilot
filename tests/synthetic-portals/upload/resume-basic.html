@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Resume upload - basic</title></head>
+<body>
+<h1>Apply to Uploadly</h1>
+<form id="f">
+  <div class="row">
+    <label for="resume">Resume</label>
+    <input type="file" id="resume" name="resume" required>
+    <span id="status" data-state="empty">No file attached</span>
+  </div>
+  <button type="submit" id="final">Submit application</button>
+</form>
+<script src="/_common.js"></script>
+<script>
+  window.__uploads = [];
+  document.getElementById("resume").addEventListener("change", (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    window.__uploads.push({ name: f.name, size: f.size, type: f.type });
+    const s = document.getElementById("status");
+    s.textContent = "Attached: " + f.name;
+    s.dataset.state = "attached";
+  });
+</script>
+</body></html>

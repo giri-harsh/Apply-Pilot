@@ -17,6 +17,7 @@ import { mapAiMappings, mapFields } from "./mapping/map";
 import { classifyControls, pickNext } from "./navigation/classify";
 import { observeForm, type ObservedForm } from "./observer/observe";
 import { waitForStable } from "./stability";
+import { handleUpload } from "./upload";
 import { verifyFill } from "./verification/verify";
 
 /**
@@ -120,6 +121,15 @@ async function handle(req: ContentRequest): Promise<ContentResponse> {
     case "CANCEL":
       setCancelled(true);
       return { ok: true, kind: "CANCELLED" };
+    case "UPLOAD_LIST":
+    case "UPLOAD_BEGIN":
+    case "UPLOAD_CHUNK":
+    case "UPLOAD_COMMIT":
+    case "UPLOAD_ABORT": {
+      if (!observed) return { ok: false, code: "NO_RUN", message: "Observe before uploading" };
+      const obs = observed;
+      return handleUpload(req, { doc: document, fields: obs.fields, elementsFor: (id) => obs.targets.get(id) });
+    }
   }
 }
 

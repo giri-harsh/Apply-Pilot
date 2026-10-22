@@ -27,6 +27,7 @@ import type { AiStatus } from "@/shared/messages";
 import { generateAnswers, type AnswerQuestion } from "@/answers/generate";
 import { classifyQuestion } from "@/answers/questions";
 import { clearAnswerCache, deleteAnswer, listAnswers, saveAnswer } from "@/answers/storage";
+import type { TailorAi } from "@/resume/contracts";
 import type { AiClassifyInput, AiClassifyResult, AnswerPhaseInput, AnswerPhaseResult } from "./run-manager";
 
 export type AiServiceDeps = {
@@ -64,6 +65,14 @@ export class AiService {
   private async configuredProviders(settings: AiSettings, config: AIConfig): Promise<AIProvider[]> {
     const status = await keyStatus(this.deps.store);
     return settings.providerOrder.filter((id) => status[id].configured).map((id) => this.makeProvider(id, config));
+  }
+
+  /** Provider layer for resume tailoring (Phase 7). `null` when AI is off or no key is configured: tailoring then never calls a model. */
+  async resumeAi(): Promise<TailorAi> {
+    const { settings, config } = await this.load();
+    if (!settings.aiEnabled) return null;
+    const providers = await this.configuredProviders(settings, config);
+    return providers.length === 0 ? null : { providers, config, store: this.deps.store };
   }
 
   async status(): Promise<AiStatus> {

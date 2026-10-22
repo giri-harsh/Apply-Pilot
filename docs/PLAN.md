@@ -25,7 +25,7 @@ TypeScript, React 19, Vite 8 (multi-build), Zod 3, Vitest 5 + jsdom, Playwright 
 - Phase 5: job description extraction + job context schema.
 - Phase 6: grounded answer generation, sensitive-question policy.
 - Phase 9 (pulled ahead of 7 and 8, session 3): planner loop, bounded recovery, multi-step forms, dynamic DOM observation, final-control classifier, blocker detection. Reason: the single-observation-pass limit blocks real portals.
-- Phase 7 (next session): resume import, variants, tailoring, DOCX/PDF, page-count validation. Likely needs the Phase 10 companion for rendering.
+- Phase 7 (done, session 4, in-extension): resume import, variants, grounded tailoring, deterministic PDF layout with a measured page count, DOCX export, upload integration. The Phase 10 companion was not needed for it and stays deferred.
 - Phase 8: portal adapters driven by real testing.
 - Phase 10: optional local companion (only if needed).
 - Phase 11: hardening, privacy/permission review, docs.

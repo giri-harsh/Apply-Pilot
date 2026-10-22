@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Resume next to other documents</title></head>
+<body>
+<h1>Apply to Paperwork Plc</h1>
+<form id="f">
+  <div class="row"><label for="transcript">Academic transcript</label><input type="file" id="transcript" name="transcript"><span class="st" data-state="empty"></span></div>
+  <div class="row"><label for="portfolio">Portfolio</label><input type="file" id="portfolio" name="portfolio"><span class="st" data-state="empty"></span></div>
+  <div class="row"><label for="resume">Resume</label><input type="file" id="resume" name="resume"><span class="st" data-state="empty"></span></div>
+</form>
+<script src="/_common.js"></script>
+<script>
+  for (const i of document.querySelectorAll("input[type=file]")) {
+    i.addEventListener("change", () => {
+      const s = i.parentElement.querySelector(".st");
+      s.textContent = "Attached: " + i.files[0].name;
+      s.dataset.state = "attached";
+    });
+  }
+</script>
+</body></html>

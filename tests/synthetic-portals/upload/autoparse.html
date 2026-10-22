@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Resume upload - auto-parse</title></head>
+<body>
+<h1>Apply to Autoparse Labs</h1>
+<form id="f">
+  <div class="row">
+    <label for="resume">Resume</label>
+    <input type="file" id="resume" name="resume" accept=".pdf">
+    <span id="status" data-state="empty">No file attached</span>
+  </div>
+  <div class="row"><label for="fullname">Full name</label><input type="text" id="fullname" name="fullname"></div>
+  <div class="row"><label for="email">Email</label><input type="email" id="email" name="email"></div>
+  <div class="row"><label for="city">City</label><input type="text" id="city" name="city"></div>
+  <button type="submit" id="final">Submit application</button>
+</form>
+<script src="/_common.js"></script>
+<script>
+  // The site "parses" the upload and fills fields. The name differs from the applicant's profile ("Alex Example").
+  document.getElementById("resume").addEventListener("change", (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const s = document.getElementById("status");
+    s.textContent = "Parsing " + f.name + "...";
+    s.dataset.state = "parsing";
+    setTimeout(() => {
+      document.getElementById("fullname").value = "Alexander J. Example";
+      document.getElementById("email").value = "alex@example.test";
+      s.textContent = "Parsed " + f.name;
+      s.dataset.state = "parsed";
+    }, 120);
+  });
+</script>
+</body></html>

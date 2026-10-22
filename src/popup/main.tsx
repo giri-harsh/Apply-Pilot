@@ -12,8 +12,27 @@ import type { AiStatus } from "@/shared/messages";
 import type { JobSummary } from "@/job/schema";
 import { STATE_LABELS, isWorking } from "@/shared/state-machine";
 import { PROFILE_STORAGE_KEY, loadProfile } from "@/shared/storage";
+import { loadVariantOptions, type VariantOption } from "./variants";
 import { chooseGrantOrigin, originLabel, permissionRequest } from "@/shared/origin";
 import "./popup.css";
+
+/** "Prepared" and "uploaded" are different facts: the headline says uploaded only after the page recognised the file. */
+function resumeStatusText(r: RunRecord["resume"]): string {
+  switch (r.status) {
+    case "tailored":
+      return r.uploadVerified ? "Tailored resume uploaded" : "Tailored resume prepared, not uploaded";
+    case "reused":
+      return r.uploadVerified ? "Saved resume uploaded" : "Saved resume found, not uploaded";
+    case "off":
+      return "Resume tailoring is off";
+    case "none":
+      return "No resume available";
+    case "failed":
+      return "Resume could not be prepared";
+    default:
+      return "";
+  }
+}
 
 const STEP_OUTCOME = {
   advanced: "moved on",
@@ -105,10 +124,16 @@ function Popup() {
     return () => clearInterval(t);
   }, [tabId, working, refresh]);
 
+  const [variants, setVariants] = useState<VariantOption[]>([]);
+  const [variantChoice, setVariantChoice] = useState<string>("");
+  useEffect(() => {
+    void loadVariantOptions().then(setVariants);
+  }, []);
+
   const act = async (kind: "START_RUN" | "STOP_RUN") => {
     if (tabId === null) return;
     setError(null);
-    const r = await send({ kind, tabId });
+    const r = await send(kind === "START_RUN" ? { kind, tabId, variantId: variantChoice || null } : { kind, tabId });
     if (r.ok && "run" in r) setRun(r.run);
     else if (!r.ok) setError(r.message);
   };
@@ -176,6 +201,20 @@ function Popup() {
         <dd data-testid="ai-status">{aiLabel(aiStatus)}</dd>
       </dl>
 
+      {variants.length > 0 && (
+        <div className="field">
+          <label htmlFor="variant-select">Resume variant</label>
+          <select id="variant-select" data-testid="variant-select" value={variantChoice} disabled={working} onChange={(e) => setVariantChoice(e.target.value)}>
+            <option value="">Automatic (from the job)</option>
+            {variants.map((v) => (
+              <option key={v.variantId} value={v.variantId}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div className="buttons">
         <button data-testid="quick-apply" className="primary" disabled={working || tabId === null} onClick={() => void act("START_RUN")}>
           Quick Apply
@@ -225,6 +264,29 @@ function Popup() {
           <p className="note">
             Actions: {run.counters.actions}, retries: {run.counters.retries}, passes: {run.counters.passes}, step changes: {run.counters.transitions}
           </p>
+        </section>
+      )}
+
+      {run && run.resume.status !== "not_needed" && (
+        <section data-testid="resume-info" className="report">
+          <h2>Resume</h2>
+          <p data-testid="resume-status" data-status={run.resume.status}>
+            {resumeStatusText(run.resume)}
+            {run.resume.filename ? `: ${run.resume.filename}` : ""}
+            {run.resume.pageCount !== null ? ` (${run.resume.pageCount} page${run.resume.pageCount === 1 ? "" : "s"})` : ""}
+          </p>
+          {run.resume.variantId && (
+            <p className="note" data-testid="resume-variant">
+              Variant: {variants.find((v) => v.variantId === run.resume.variantId)?.name ?? run.resume.variantId} ({run.resume.variantAuto ? "chosen automatically" : "your choice"})
+            </p>
+          )}
+          {run.resume.warnings.length > 0 && (
+            <ul data-testid="resume-warnings" className="note">
+              {run.resume.warnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Resume upload - drop zone</title>
+<style>.dropzone{border:2px dashed #888;padding:24px;cursor:pointer}</style></head>
+<body>
+<h1>Apply to Dropzone Inc</h1>
+<form id="f">
+  <div class="row">
+    <label for="resume">Resume</label>
+    <div class="dropzone" id="dz">
+      <input type="file" id="resume" name="resume" accept=".pdf,.docx" style="display:none">
+      <span class="hint">Drag and drop your file here</span>
+      <span id="file-name" data-state="empty"></span>
+    </div>
+  </div>
+  <button type="submit" id="final">Submit application</button>
+</form>
+<script src="/_common.js"></script>
+<script>
+  window.__uploads = [];
+  const input = document.getElementById("resume");
+  input.addEventListener("change", () => {
+    const f = input.files[0];
+    if (!f) return;
+    window.__uploads.push({ name: f.name, size: f.size, type: f.type });
+    const n = document.getElementById("file-name");
+    n.textContent = f.name;
+    n.dataset.state = "attached";
+  });
+</script>
+</body></html>

@@ -8,7 +8,8 @@ export function buildManifest({ e2e = false } = {}) {
     action: { default_title: "ApplyPilot AI", default_popup: "popup.html" },
     options_ui: { page: "options.html", open_in_tab: true },
     background: { service_worker: "background.js" },
-    permissions: ["activeTab", "scripting", "storage"],
+    // "offscreen": the document builder (PDF layout and validation) runs in an offscreen document; see docs/PERMISSIONS.md.
+    permissions: ["activeTab", "scripting", "storage", "offscreen"],
     // Exactly the two AI API origins, used by the service worker only. Nothing broader.
     host_permissions: ["https://generativelanguage.googleapis.com/*", "https://api.groq.com/*"],
     // Nothing here is granted at install. The popup asks for ONE origin at a time, from a user click, when a run is

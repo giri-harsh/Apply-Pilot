@@ -41,7 +41,7 @@ test.describe("Step A: per-origin optional host permission", () => {
     }
     const prod = JSON.parse(fs.readFileSync(path.join(root, "dist", "manifest.json"), "utf8"));
     expect(prod.host_permissions.sort()).toEqual(["https://api.groq.com/*", "https://generativelanguage.googleapis.com/*"]);
-    expect(prod.permissions.sort()).toEqual(["activeTab", "scripting", "storage"]);
+    expect(prod.permissions.sort()).toEqual(["activeTab", "offscreen", "scripting", "storage"]);
   });
 
   test("Site access list shows nothing by default and never lists install-time hosts", async () => {

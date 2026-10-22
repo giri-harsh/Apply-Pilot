@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Resume upload - drop only</title>
+<style>.dropzone{border:2px dashed #888;padding:24px}</style></head>
+<body>
+<h1>Apply to Droponly Corp</h1>
+<form id="f">
+  <div class="row">
+    <label for="resume">Resume</label>
+    <div class="dropzone" id="zone">
+      <input type="file" id="resume" name="resume" style="display:none">
+      <span>Drop your file here</span>
+      <span id="status" data-state="empty"></span>
+    </div>
+  </div>
+</form>
+<script src="/_common.js"></script>
+<script>
+  // Deliberately no change/input listener on the input: only a drop on the zone is understood.
+  window.__drops = 0;
+  const zone = document.getElementById("zone");
+  zone.addEventListener("dragover", (e) => e.preventDefault());
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const f = e.dataTransfer && e.dataTransfer.files[0];
+    if (!f) return;
+    window.__drops += 1;
+    const s = document.getElementById("status");
+    s.textContent = f.name;
+    s.dataset.state = "attached";
+  });
+</script>
+</body></html>

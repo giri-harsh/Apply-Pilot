@@ -5,6 +5,7 @@ import { PROVIDER_IDS } from "../ai/config";
 import { RunRecordSchema } from "./run";
 import { JobContextSchema, JobSummarySchema } from "../job/schema";
 import { SavedAnswerSchema } from "../answers/storage";
+import { UploadContentRequestSchemas, UploadContentResponseSchemas } from "../resume/messages";
 
 export const ErrorResponseSchema = z.object({
   ok: z.literal(false),
@@ -26,7 +27,7 @@ export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 export const ProviderIdSchema = z.enum(PROVIDER_IDS);
 
 export const BackgroundRequestSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("START_RUN"), tabId: z.number().int() }),
+  z.object({ kind: z.literal("START_RUN"), tabId: z.number().int(), variantId: z.string().max(80).nullable().optional() }),
   z.object({ kind: z.literal("STOP_RUN"), tabId: z.number().int() }),
   z.object({ kind: z.literal("GET_RUN"), tabId: z.number().int() }),
   // After the user granted the origin (from a click): continue a run that was blocked by a lost permission.
@@ -119,6 +120,7 @@ export const ContentRequestSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("DETECT_BLOCKERS") }),
   z.object({ kind: z.literal("NAVIGATE"), controlId: z.string().max(20), text: z.string().max(100) }),
   z.object({ kind: z.literal("CANCEL") }),
+  ...UploadContentRequestSchemas,
 ]);
 export type ContentRequest = z.infer<typeof ContentRequestSchema>;
 
@@ -179,6 +181,7 @@ export const ContentResponseSchema = z.union([
   z.object({ ok: z.literal(true), kind: z.literal("VERIFIED"), results: z.array(VerificationResultSchema) }),
   z.object({ ok: z.literal(true), kind: z.literal("JOB_EXTRACTED"), job: JobContextSchema }),
   z.object({ ok: z.literal(true), kind: z.literal("CANCELLED") }),
+  ...UploadContentResponseSchemas,
   ErrorResponseSchema,
 ]);
 export type ContentResponse = z.infer<typeof ContentResponseSchema>;

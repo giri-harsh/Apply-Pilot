@@ -1,6 +1,6 @@
 import { build } from "vite";
 import react from "@vitejs/plugin-react";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { buildManifest } from "./manifest.mjs";
@@ -24,7 +24,7 @@ await build({
   build: {
     outDir,
     emptyOutDir: false,
-    rollupOptions: { input: { popup: path.join(root, "src/pages/popup.html"), options: path.join(root, "src/pages/options.html") } },
+    rollupOptions: { input: { popup: path.join(root, "src/pages/popup.html"), options: path.join(root, "src/pages/options.html"), offscreen: path.join(root, "src/pages/offscreen.html") } },
   },
 });
 
@@ -39,6 +39,11 @@ for (const [name, entry] of [["background", "src/background/index.ts"], ["conten
     },
   });
 }
+
+// 3. Assets the offscreen document loads at run time: the embedded PDF fonts (never imported, so they stay out of every
+// bundle) and the pdf.js worker used to read generated PDFs back for validation.
+cpSync(path.join(root, "assets", "fonts"), path.join(outDir, "assets", "fonts"), { recursive: true });
+cpSync(path.join(root, "node_modules", "pdfjs-dist", "legacy", "build", "pdf.worker.mjs"), path.join(outDir, "pdf.worker.mjs"));
 
 writeFileSync(path.join(outDir, "manifest.json"), JSON.stringify(buildManifest({ e2e }), null, 2));
 console.log(`Built ${e2e ? "e2e " : ""}extension -> ${path.relative(root, outDir)}`);

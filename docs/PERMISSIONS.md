@@ -5,6 +5,7 @@
 | `activeTab` | Grants temporary access to the tab where the user clicks the ApplyPilot toolbar button, so Quick Apply can inject the content script and read/fill that one page. | Expires on navigation/tab close. No broad page access. |
 | `scripting` | `chrome.scripting.executeScript` injects `content.js` into the active tab on demand. | Only used after the user starts a run (or opens the popup for the job preview, Phase 5). |
 | `storage` | Saves the profile vault, run state, AI settings, API keys, usage log and mapping cache in `chrome.storage.local`. | Data stays on the device, in separate keys per concern. Nothing is synced. |
+| `offscreen` | Lets the service worker create one hidden extension document that lays out and validates the tailored resume PDF (pdf-lib, pdf.js) and builds the DOCX. Service workers have no DOM and should stay small. | The document is an extension page (`offscreen.html`); its code makes no network requests and never reads API keys (AI calls stay in the service worker, which the document reaches only for shorter resume wording). It is created on demand. No effect on any website. |
 | host `https://generativelanguage.googleapis.com/*` | Lets the **service worker** call the Gemini REST API. | Exactly one origin. Only used when the user turns AI on and saves a Gemini key. |
 | host `https://api.groq.com/*` | Lets the **service worker** call the Groq REST API. | Exactly one origin. Only used when the user turns AI on and saves a Groq key. |
 

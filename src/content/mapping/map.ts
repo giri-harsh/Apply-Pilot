@@ -120,7 +120,7 @@ function planField(f: FormField, profile: UserProfile, opts: PlanOptions): { pla
   if (f.semanticType === "third_party_contact") return { skipped: skip(f, "skipped_third_party", "Belongs to a reference or contact, not the applicant") };
   if (f.ambiguous && !opts.allowConflictAmbiguity) return { skipped: skip(f, "ambiguous", f.ambiguityReason ?? "Ambiguous field") };
   if (!f.enabled) return { skipped: skip(f, "unresolved", "Field is disabled or read-only") };
-  if (f.control === "file") return { skipped: skip(f, "unresolved", "File uploads are not supported yet") };
+  if (f.control === "file") return { skipped: skip(f, "unresolved", "File field: handled by the resume upload step") };
   if (f.control === "checkbox" || f.control === "radio") return { skipped: skip(f, "unresolved", "No profile value maps to a checkbox or radio group yet") };
   const key = TYPE_TO_PROFILE_KEY[f.semanticType];
   if (!key) return { skipped: skip(f, "unresolved", "No deterministic profile mapping for this field") };

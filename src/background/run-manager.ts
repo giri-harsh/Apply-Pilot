@@ -37,7 +37,25 @@ export type AnswerPhaseResult = {
   error: string | null;
 };
 
+/** Phase 7: put the right resume into the page's file field(s). Never throws; problems come back as results and warnings. */
+export type UploadPhaseInput = {
+  tabId: number;
+  runId: string;
+  url: string;
+  /** Visible file inputs of the final observation of this step. */
+  fields: FormField[];
+  variantId: string | null;
+  resume: RunRecord["resume"];
+  scheduler: Scheduler;
+  isActive(): boolean;
+  /** Persists the run's resume info right away (document id, uploads so far). */
+  save(resume: RunRecord["resume"]): Promise<void>;
+};
+export type UploadPhaseResult = { results: FieldResult[]; resume: RunRecord["resume"]; notes: string[] };
+
 export interface RunDeps {
+  /** Resume tailoring and upload (Phase 7). Absent means file fields are only reported. */
+  uploadResume?(input: UploadPhaseInput): Promise<UploadPhaseResult>;
   /** Grounded answers for open-ended questions (Phase 6). */
   answerQuestions?(input: AnswerPhaseInput): Promise<AnswerPhaseResult>;
   /** Job context for the page (Phase 5). A failure here never stops the run. */
@@ -136,7 +154,7 @@ export class RunManager {
   }
 
   /** Quick Apply. Guards against a second concurrent run on the same tab before any await. */
-  async start(tabId: number): Promise<StartResult> {
+  async start(tabId: number, opts: { variantId?: string | null } = {}): Promise<StartResult> {
     if (this.starting.has(tabId)) {
       return { ok: false, code: "DUPLICATE_RUN", message: "A run is already starting on this tab" };
     }
@@ -169,6 +187,8 @@ export class RunManager {
         notes: [],
         needsPermission: false,
         permissionOrigin: null,
+        resume: { status: "not_needed", variantId: null, variantAuto: false, documentId: null, filename: null, pageCount: null, warnings: [], uploaded: [], uploadVerified: false },
+        variantOverride: opts.variantId ?? null,
         reason: null,
         ai: { status: "off", requests: 0, cacheHits: 0, accepted: 0, provider: null, error: null },
       };
@@ -370,6 +390,37 @@ export class RunManager {
         let stepUrl = cur().url;
         let stepTitle = cur().pageTitle;
         let stepFields = 0;
+        let lastFields: FormField[] = [];
+        let uploadDone = false;
+        /** Resume upload for the file inputs of the latest observation. Returns true when the page recognised a file. */
+        const runUpload = async (fileFields: FormField[]): Promise<boolean> => {
+          this.assertActive(runId, tabId);
+          this.checkDuration(startedAt);
+          if (counters.actions + fileFields.length > L.maxActions) throw new LimitReached("actions", `${L.maxActions} actions`);
+          try {
+            const up = await this.deps.uploadResume!({
+              tabId,
+              runId,
+              url: stepUrl,
+              fields: fileFields,
+              variantId: cur().variantOverride,
+              resume: cur().resume,
+              scheduler: sched,
+              isActive: () => this.runs[key(tabId)]?.runId === runId && !isTerminal(this.runs[key(tabId)]!.state),
+              save: (resume) => this.update(runId, tabId, { resume }),
+            });
+            acc.addPass([], up.results, [], []);
+            for (const n of up.notes) addNote(n);
+            const verified = up.results.filter((r) => r.outcome === "filled_verified").length;
+            counters = { ...counters, actions: counters.actions + verified };
+            await this.update(runId, tabId, { resume: up.resume, counters, notes });
+            return verified > 0;
+          } catch (e) {
+            if (e instanceof Abort) throw e;
+            addNote("The resume upload step failed unexpectedly; upload the file yourself");
+            return false;
+          }
+        };
         let moreWork = false;
 
         const stepRecord = (outcome: StepSummary["outcome"], advancedBy: string | null, note: string | null): StepRecord => ({
@@ -397,6 +448,7 @@ export class RunManager {
           stepTitle = obs.pageTitle;
           const visible = obs.fields.filter((f) => f.visible);
           stepFields = Math.max(stepFields, visible.length);
+          lastFields = obs.fields;
 
           // ---- blockers and unreadable frames are checked at the start of every step
           if (pass === 0) {
@@ -581,7 +633,21 @@ export class RunManager {
           for (const s of waitingOnDisabled) disabledSeen.set(s.fingerprint ?? s.fieldId, (disabledSeen.get(s.fingerprint ?? s.fieldId) ?? 0) + 1);
           if (waitingOnDisabled.length > 0) await sched.sleep(L.disabledRetryMs);
           moreWork = runnable.length > 0 || retryable || waitingOnDisabled.length > 0;
-          if (!moreWork) break; // converged: this pass found nothing left to do
+          if (!moreWork) {
+            // Converged. File fields are handled once the text fields are done (SPEC 12.7, 16); a site that parses the
+            // uploaded resume may rewrite fields, so a verified upload is followed by one more observe-map-verify pass.
+            const fileFields = lastFields.filter((f) => f.control === "file" && f.visible);
+            if (!uploadDone && fileFields.length > 0 && this.deps.uploadResume) {
+              uploadDone = true;
+              const verifiedUpload = await runUpload(fileFields);
+              if (verifiedUpload && pass + 1 < L.maxPassesPerStep) {
+                moreWork = true;
+                await this.move(runId, tabId, "OBSERVING");
+                continue;
+              }
+            }
+            break;
+          }
           await this.move(runId, tabId, "OBSERVING");
         }
 

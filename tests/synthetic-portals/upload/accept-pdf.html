@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Resume upload - PDF only</title></head>
+<body>
+<h1>Apply to PDF Only Co</h1>
+<form id="f">
+  <div class="row">
+    <label for="resume">Resume (PDF only)</label>
+    <input type="file" id="resume" name="resume" accept=".pdf">
+    <span id="status" data-state="empty">No file attached</span>
+  </div>
+</form>
+<script src="/_common.js"></script>
+<script>
+  document.getElementById("resume").addEventListener("change", (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const s = document.getElementById("status");
+    s.textContent = "Attached: " + f.name;
+    s.dataset.state = "attached";
+  });
+</script>
+</body></html>
