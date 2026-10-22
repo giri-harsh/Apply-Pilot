@@ -30,7 +30,7 @@ test.afterAll(() => {
   fs.writeFileSync("test-results/a11y-minor.json", JSON.stringify(minor, null, 2));
 });
 
-const TABS = ["Personal", "Education", "Skills", "Projects", "Experience", "Certifications", "Preferences", "AI providers", "Site access", "Resume", "Diagnostics", "Import / Export"];
+const TABS = ["Personal", "Education", "Skills", "Projects", "Experience", "Certifications", "Preferences", "AI providers", "Site access", "Resume", "History", "Diagnostics", "Import / Export"];
 
 test.describe("accessibility (axe) on the extension's own pages", () => {
   test("popup: idle, and after a run with a report, steps and resume info", async () => {

@@ -16,6 +16,7 @@ import { AiPanel } from "./AiPanel";
 import { SiteAccessPanel } from "./SiteAccessPanel";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { LearnedPanel } from "./LearnedPanel";
+import { HistoryPanel } from "./HistoryPanel";
 import { ResumeImportPanel } from "./resume/ResumeImportPanel";
 import { ResumeSettingsPanel } from "./resume/ResumeSettingsPanel";
 import { MasterEditorPanel } from "./resume/MasterEditorPanel";
@@ -155,7 +156,7 @@ const PREF_DEFS: Def[] = [
   { key: "resumeMaxPages", label: "Preferred resume length (pages)", kind: "number" },
 ];
 
-const TABS = ["Personal", "Education", "Skills", "Projects", "Experience", "Certifications", "Preferences", "AI providers", "Site access", "Resume", "Diagnostics", "Import / Export"] as const;
+const TABS = ["Personal", "Education", "Skills", "Projects", "Experience", "Certifications", "Preferences", "AI providers", "Site access", "Resume", "History", "Diagnostics", "Import / Export"] as const;
 type Tab = (typeof TABS)[number];
 
 function errorsFor(issues: ProfileIssue[], base: string): string[] {
@@ -364,6 +365,8 @@ function App() {
       {tab === "AI providers" && <AiPanel />}
 
       {tab === "Site access" && <SiteAccessPanel />}
+
+      {tab === "History" && <HistoryPanel />}
 
       {tab === "Diagnostics" && (
         <>

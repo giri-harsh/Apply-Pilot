@@ -18,6 +18,7 @@ import { RunManager } from "./run-manager";
 import { ResumeService } from "./resume-service";
 import { DiagnosticsService } from "./diagnostics-service";
 import { LearningService } from "@/learning/service";
+import { HistoryService } from "@/history/history";
 import { createCaptureStore } from "@/diagnostics/store";
 import { DIAG_SETTINGS_KEY, DiagSettingsSchema } from "@/diagnostics/schema";
 import { chooseFileForField } from "@/content/upload/choose";
@@ -129,7 +130,10 @@ const diagnostics = new DiagnosticsService({
 
 const learning = new LearningService({ store: chromeStore(), now: () => Date.now(), newId: () => crypto.randomUUID() });
 
+const history = new HistoryService({ store: chromeStore(), loadProfile, now: () => Date.now() });
+
 const manager = new RunManager({
+  onFinished: (run) => history.record(run),
   learning,
   captureStep: async (tabId, stepIndex) => {
     const raw = (await chrome.storage.local.get(DIAG_SETTINGS_KEY))[DIAG_SETTINGS_KEY];

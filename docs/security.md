@@ -49,6 +49,7 @@ Tests: `navigation.test.ts` (classifier cases), `run-manager.test.ts`, and `phas
 | `applypilot.diagnostics.settings.*`, `applypilot.learning.settings.*` | same | the "capture each step" and "learning" switches | captures |
 | `applypilot.learned.v1` | same | verified strategies: host, hashed structure, pattern hash, types and profile KEYS, confidence | values, label text, personal strings |
 | `applypilot.answers.*` | same | answers you chose to save | unsaved answers |
+| `applypilot.history.v1` | same | one record per finished run: host and path (no query), company, role, counts, step outcomes, labels left for you, masked warnings, AI counts | typed values, profile strings, prompts |
 | `applypilot.jobs.*` | same | public posting text, 6 h cache | profile data |
 | `applypilot.resume.*` (master, variants, documents, settings) | same | your master resume, generated-resume records and reports | binaries, keys |
 | `applypilot-resume` | IndexedDB | your imported/generated resume files | metadata duplicates |
