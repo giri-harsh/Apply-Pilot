@@ -3,7 +3,7 @@
 Branch `hardening-wip` (from main at ccf7efd). Queue in order: M1 -> M2 -> M3 -> M4, then Q1-Q5 on branch `queue-wip`.
 
 ## Done
-- M1 (phase-7b): live filter + LIVE_MAX_CALLS cap, live shorten verified (1 call), cover-letter wiring, master editor, DOCX cap. Committed as `phase-7b: ...`.
+- M1-M4 done and merged: phase-7b, phase-8-prep (capture), phase-11a (hardening). 3x e2e green (146), 776 unit.
 
 ## Next
 - M2: redacted portal capture (popup button + options Diagnostics tab, IndexedDB `diagnostics` namespace, redaction unit test scanning every profile string, JSON export via blob anchor, "capture each step" mode).
