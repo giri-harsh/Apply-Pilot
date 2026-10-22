@@ -502,6 +502,44 @@ describe("RunManager: blockers, frames and navigation", () => {
     expect(run.state).toBe("BLOCKED");
     expect(run.reason).toMatch(/Permission lost after navigation/);
     expect(run.report!.verified).toBe(1); // the first page's work is kept
+    expect(run.needsPermission).toBe(true);
+  });
+
+  it("records the origin when the URL is readable, and resumes after a grant as a continuation that keeps finished steps", async () => {
+    const page = new FakePage({ steps: [{ fields: [email], next: "Next", unload: true }, { fields: [{ key: "city", label: "City", type: "city" }] }] });
+    let granted = false;
+    const { mgr } = setup(page, {
+      injectContent: async () => { if (page.step > 0 && !granted) throw new Error("Cannot access contents of the page"); },
+      tabInfo: async () => ({ url: "https://next.example.com/step2?x=1", title: "T" }),
+    });
+    await mgr.start(1);
+    await until(mgr, 1, final);
+    const blocked = (await mgr.get(1))!;
+    expect(blocked).toMatchObject({ state: "BLOCKED", needsPermission: true, permissionOrigin: "https://next.example.com/*" });
+
+    expect((await mgr.resumeAfterGrant(1)).ok).toBe(true); // injection is still refused: blocked again, not an endless loop
+    await until(mgr, 1, final);
+    expect((await mgr.get(1))!.needsPermission).toBe(true);
+
+    granted = true;
+    const r = await mgr.resumeAfterGrant(1);
+    expect(r.ok).toBe(true);
+    await until(mgr, 1, final);
+    const run = (await mgr.get(1))!;
+    expect(run.state).toBe("READY_FOR_REVIEW");
+    expect(run.runId).not.toBe(blocked.runId);
+    expect(run.resumeCount).toBe(2);
+    expect(run.steps.map((s) => s.index)).toEqual([0, 1]);
+    expect(run.report!.verified).toBe(2); // step 0 from before the block, step 1 after
+    expect(page.executeBatches.flat().map((p) => p.label)).toEqual(["Email", "City"]); // nothing replayed
+  });
+
+  it("resumeAfterGrant refuses a run that is not waiting for a permission", async () => {
+    const { mgr } = setup(new FakePage(single([email])));
+    expect(await mgr.resumeAfterGrant(1)).toMatchObject({ ok: false, code: "NO_RUN" });
+    await mgr.start(1);
+    await until(mgr, 1, final);
+    expect(await mgr.resumeAfterGrant(1)).toMatchObject({ ok: false, code: "NO_RUN" });
   });
 
   it("a page that never loads after next blocks the run", async () => {

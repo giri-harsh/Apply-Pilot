@@ -9,6 +9,7 @@ import { InvalidTransitionError, assertTransition, isTerminal, isWorking, type R
 import { Abort, LimitReached } from "./abort";
 import { DEFAULT_LIMITS, type RunLimits } from "./limits";
 import { Scheduler } from "./scheduler";
+import { originPattern } from "@/shared/origin";
 
 export { DEFAULT_LIMITS };
 export type { RunLimits };
@@ -166,8 +167,52 @@ export class RunManager {
         steps: [],
         counters: { actions: 0, retries: 0, passes: 0, transitions: 0 },
         notes: [],
+        needsPermission: false,
+        permissionOrigin: null,
         reason: null,
         ai: { status: "off", requests: 0, cacheHits: 0, accepted: 0, provider: null, error: null },
+      };
+      this.runs[key(tabId)] = run;
+      await this.persist();
+      void this.drive(run.runId, tabId, at);
+      return { ok: true, run };
+    } finally {
+      this.starting.delete(tabId);
+    }
+  }
+
+  /**
+   * Continues a run that ended BLOCKED because the page could no longer be read after a navigation. Called only after
+   * the user granted the origin from a click. BLOCKED stays terminal: this starts a continuation run that inherits the
+   * finished steps, counters, notes and answers, then re-observes the page it is now on (never a replay).
+   */
+  async resumeAfterGrant(tabId: number): Promise<StartResult> {
+    if (this.starting.has(tabId)) return { ok: false, code: "DUPLICATE_RUN", message: "A run is already starting on this tab" };
+    this.starting.add(tabId);
+    try {
+      await this.ensureLoaded();
+      const old = this.runs[key(tabId)];
+      if (!old || old.state !== "BLOCKED" || !old.needsPermission) {
+        return { ok: false, code: "NO_RUN", message: "This run is not waiting for a site permission" };
+      }
+      const info = await this.deps.tabInfo(tabId);
+      if (!info) return { ok: false, code: "INJECTION_FAILED", message: "Tab is not available" };
+      const at = this.deps.now();
+      const run: RunRecord = {
+        ...old,
+        runId: this.deps.newId(),
+        url: info.url || old.url,
+        pageTitle: info.title || old.pageTitle,
+        state: "INITIALIZING",
+        history: [{ state: "INITIALIZING", at }],
+        startedAt: at,
+        updatedAt: at,
+        resumeCount: old.resumeCount + 1,
+        report: null,
+        counters: { ...old.counters, transitions: old.counters.transitions + 1 }, // the click that navigated counts
+        needsPermission: false,
+        permissionOrigin: null,
+        reason: null,
       };
       this.runs[key(tabId)] = run;
       await this.persist();
@@ -291,9 +336,9 @@ export class RunManager {
 
     // Terminal helpers: every ending carries the real report built from the steps so far.
     const report = (current?: StepRecord): CompletionReport => combineReport(current ? [...steps, current] : steps, notes);
-    const blockedWith = async (reason: string, current?: StepRecord) => {
+    const blockedWith = async (reason: string, current?: StepRecord, extra: Partial<RunRecord> = {}) => {
       addNote(reason);
-      await this.move(runId, tabId, "BLOCKED", { reason, report: report(current), steps: current ? [...steps, current] : steps, counters, notes, answers, ai });
+      await this.move(runId, tabId, "BLOCKED", { reason, report: report(current), steps: current ? [...steps, current] : steps, counters, notes, answers, ai, ...extra });
     };
     const finishWith = async (state: "READY_FOR_REVIEW" | "PARTIALLY_COMPLETED", current: StepRecord) => {
       const all = [...steps, current];
@@ -303,6 +348,10 @@ export class RunManager {
     try {
       await this.deps.injectContent(tabId);
     } catch {
+      // A run that already finished steps and now cannot read the page lost its permission by navigating; the popup can ask again.
+      if (steps.length > 0) {
+        return blockedWith("Permission lost after navigation: the browser still does not let ApplyPilot read this page. Allow ApplyPilot on this site from the popup to continue.", undefined, { needsPermission: true });
+      }
       return blockedWith("Cannot access this page (restricted page or permission not granted)");
     }
     const profile = await this.deps.loadProfile();
@@ -576,7 +625,13 @@ export class RunManager {
           try {
             await this.deps.injectContent(tabId);
           } catch {
-            return await blockedWith("Permission lost after navigation: the browser no longer lets ApplyPilot read this page. Click the ApplyPilot icon on the new page and run Quick Apply again.", stepRecord("advanced", next.text, "Navigated"));
+            // The URL of a page we may not read is hidden from us; the popup learns it from the user's own click (activeTab).
+            const info = await this.deps.tabInfo(tabId).catch(() => null);
+            return await blockedWith(
+              "Permission lost after navigation: the browser no longer lets ApplyPilot read this page. Allow ApplyPilot on this site from the popup to continue.",
+              stepRecord("advanced", next.text, "Navigated"),
+              { needsPermission: true, permissionOrigin: info?.url ? originPattern(info.url) : null },
+            );
           }
         }
 

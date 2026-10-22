@@ -11,6 +11,9 @@ export function buildManifest({ e2e = false } = {}) {
     permissions: ["activeTab", "scripting", "storage"],
     // Exactly the two AI API origins, used by the service worker only. Nothing broader.
     host_permissions: ["https://generativelanguage.googleapis.com/*", "https://api.groq.com/*"],
+    // Nothing here is granted at install. The popup asks for ONE origin at a time, from a user click, when a run is
+    // blocked after navigating to another site (see docs/PERMISSIONS.md).
+    optional_host_permissions: ["https://*/*", "http://*/*"],
     minimum_chrome_version: "110",
   };
   if (e2e) manifest.host_permissions.push("http://127.0.0.1/*");

@@ -109,6 +109,10 @@ async function handle(req: BackgroundRequest): Promise<BackgroundResponse> {
       const r = await manager.stop(req.tabId);
       return r.ok ? { ok: true, run: r.run } : r;
     }
+    case "RESUME_AFTER_GRANT": {
+      const r = await manager.resumeAfterGrant(req.tabId);
+      return r.ok ? { ok: true, run: r.run } : r;
+    }
     case "GET_RUN":
       return { ok: true, run: await manager.get(req.tabId) };
     case "AI_GET_STATUS":

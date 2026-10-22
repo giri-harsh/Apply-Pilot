@@ -29,6 +29,8 @@ export const BackgroundRequestSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("START_RUN"), tabId: z.number().int() }),
   z.object({ kind: z.literal("STOP_RUN"), tabId: z.number().int() }),
   z.object({ kind: z.literal("GET_RUN"), tabId: z.number().int() }),
+  // After the user granted the origin (from a click): continue a run that was blocked by a lost permission.
+  z.object({ kind: z.literal("RESUME_AFTER_GRANT"), tabId: z.number().int() }),
   z.object({ kind: z.literal("AI_GET_STATUS") }),
   z.object({
     kind: z.literal("AI_SET_SETTINGS"),

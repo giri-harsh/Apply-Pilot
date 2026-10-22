@@ -56,6 +56,12 @@ export const RunRecordSchema = z.object({
       error: z.string().nullable(),
     })
     .default({ status: "off", requests: 0, cacheHits: 0, accepted: 0, provider: null, error: null }),
+  /**
+   * Set when the run ended BLOCKED because the browser stopped letting us read the page after a navigation.
+   * `permissionOrigin` is the origin pattern when the service worker could tell (null when the URL was hidden).
+   */
+  needsPermission: z.boolean().default(false),
+  permissionOrigin: z.string().max(300).nullable().default(null),
   /** Safe, human-readable reason for BLOCKED / FAILED / CANCELLED. Never contains personal values. */
   reason: z.string().nullable(),
 });

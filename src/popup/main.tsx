@@ -12,6 +12,7 @@ import type { AiStatus } from "@/shared/messages";
 import type { JobSummary } from "@/job/schema";
 import { STATE_LABELS, isWorking } from "@/shared/state-machine";
 import { PROFILE_STORAGE_KEY, loadProfile } from "@/shared/storage";
+import { chooseGrantOrigin, originLabel, permissionRequest } from "@/shared/origin";
 import "./popup.css";
 
 const STEP_OUTCOME = {
@@ -112,6 +113,37 @@ function Popup() {
     else if (!r.ok) setError(r.message);
   };
 
+  // Per-origin site access (SPEC 20.1): requested only from this click, for exactly one origin, never a wildcard.
+  const allowSite = async () => {
+    if (tabId === null || !run) return;
+    setError(null);
+    let tabUrl: string | undefined;
+    try {
+      tabUrl = (await chrome.tabs.get(tabId)).url;
+    } catch {
+      tabUrl = undefined;
+    }
+    const pattern = chooseGrantOrigin(run.permissionOrigin, tabUrl, new URLSearchParams(location.search).get("grantOrigin"));
+    const req = pattern ? permissionRequest(pattern.replace(/\/\*$/, "/")) : null;
+    if (!req) {
+      setError("Could not tell which site to allow. Open this popup on the page itself.");
+      return;
+    }
+    let granted: boolean;
+    try {
+      granted = await chrome.permissions.request(req);
+    } catch {
+      granted = false;
+    }
+    if (!granted) {
+      setError("Access was not granted, so the run stays stopped.");
+      return;
+    }
+    const r = await send({ kind: "RESUME_AFTER_GRANT", tabId });
+    if (r.ok && "run" in r) setRun(r.run);
+    else if (!r.ok) setError(r.message);
+  };
+
   // SPEC 19.3: saved only when the user clicks; never automatic.
   const saveAnswer = async (fieldId: string) => {
     if (tabId === null) return;
@@ -161,6 +193,14 @@ function Popup() {
           <p data-testid="discovered">Fields found: {run.fieldsDiscovered}</p>
         )}
         {run?.reason && <p data-testid="reason">{run.reason}</p>}
+        {run?.state === "BLOCKED" && run.needsPermission && (
+          <div>
+            <button data-testid="allow-site" className="primary" onClick={() => void allowSite()}>
+              Allow ApplyPilot on {run.permissionOrigin ? originLabel(run.permissionOrigin) : "this site"}
+            </button>
+            <p className="note">Chrome will ask you to confirm. Access is for this one site and can be revoked in Settings.</p>
+          </div>
+        )}
         {job && job.warnings.length > 0 && (
           <p data-testid="job-warnings" className="note">
             Job detection notes: {job.warnings.slice(0, 2).join("; ")}
