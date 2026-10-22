@@ -44,3 +44,10 @@ Master (facts with ids and provenance) -> variant (rules over fact ids) -> rank 
 
 ## Where the code is
 `src/shared` contracts and state machine; `src/background` service worker services; `src/content` page-side code; `src/ai`, `src/answers`, `src/job`, `src/resume`, `src/diagnostics` domain modules; `src/popup`, `src/options` UI; `src/offscreen` document builder; `tests/unit`, `tests/e2e`, `tests/synthetic-portals`, `tests/live`, `tests/metrics`.
+
+## Adapters, learning, history, indicator (Phase 8a-8b, 11b-11c)
+- **Adapters** (`src/adapters/`): local, versioned data about a portal family (strict hostname rules, page signals that must all hold, structural assumptions re-validated on the live page). The content script routes each page: adapter path only when host, signals and structure all match, otherwise the general agent; the decision is recorded on the run. Hints are evidence only (field types where the classifier found none, "this unrecognised button is Next"); they never override the risk policy, the validator or the final-control guard. Only a synthetic FakeATS adapter exists; real adapters wait for real captures.
+- **Learned strategies** (`src/learning/`): verified successes only (a field mapping the AI made, a keyboard input strategy), keyed by host and a hashed page structure, reused only when the structure matches within 0.8, verified after every use, demoted on a failure and expired on the second; never a personal value. Switchable and deletable.
+- **History and usage** (`src/history/`): one structural record per finished run, AI usage per day/provider/run; no typed values.
+- **Indicator** (`src/content/indicator`, `src/background/indicator-service.ts`): a shadow-DOM status pill with Stop, fed by state changes.
+- **Capture** (`src/content/capture`, `src/diagnostics`): redacted structural snapshots for adapter development.

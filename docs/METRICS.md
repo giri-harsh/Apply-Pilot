@@ -1,6 +1,6 @@
 # Metrics (SPEC 25.5)
 
-Measured 2026-10-22 on commit `911d08c` (working tree had uncommitted changes) by `pnpm metrics`.
+Measured 2026-10-22 on commit `f130334` by `pnpm metrics`.
 Deterministic synthetic suite only (AI off, no network). These are engineering targets measured on our own fixtures, not a claim about real portals, which are measured separately.
 
 | Metric | Correct / total | Result | Target | |
@@ -22,9 +22,9 @@ Median of 3 runs per fixture, from the run record's own clock (click to final st
 
 | Fixture | Median run time |
 |---|---|
-| basic | 629 ms |
-| required-optional | 423 ms |
-| sensitive | 354 ms |
-| duplicate-labels | 358 ms |
-| dynamic-conditional | 622 ms |
-| resume-flow | 335 ms |
+| basic | 780 ms |
+| required-optional | 561 ms |
+| sensitive | 524 ms |
+| duplicate-labels | 534 ms |
+| dynamic-conditional | 777 ms |
+| resume-flow | 480 ms |
