@@ -130,6 +130,9 @@ test.describe("Phase 4: universal field understanding (HTTP mocked)", () => {
   });
 
   test("cache: a repeat visit makes zero network calls", async () => {
+    // Learned strategies (Phase 8b) deliberately answer repeat visits before the cache does; this test is about the Phase 4
+    // mapping cache, so learning is switched off here. The learned path has its own cross-run tests (learning.spec.ts).
+    await ext.worker.evaluate(() => chrome.storage.local.set({ "applypilot.learning.settings.v1": { enabled: false } }));
     await configureAi(ext, { enabled: true, keys: KEYS });
     ai.set("gemini", { respond: smartAndHostile });
     const first = await runPortal(ext, "unfamiliar-labels-v2");
