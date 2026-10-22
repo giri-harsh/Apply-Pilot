@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Fields disabled during the run</title></head>
+<body>
+<div id="app"></div>
+<script src="/_common.js"></script>
+<script>
+  // City is disabled for 1.5 s after load (transient); Phone is disabled for good (permanent).
+  window.CFG = {
+    company: "Flaky Co",
+    steps: [{ title: "Contact", next: null, finalText: "Submit application", fields: [{ label: "Full name" }, { label: "City", disabledFor: 1500 }, { label: "Phone", disabled: true }] }],
+  };
+</script>
+<script src="/_steps.js"></script>
+</body></html>

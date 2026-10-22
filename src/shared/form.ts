@@ -144,6 +144,8 @@ export const FormFieldSchema = z.object({
   widget: z.enum(["native", "combobox"]).default("native"),
   /** Length limit detected from maxlength, nearby text or a live counter (SPEC 14.2). */
   limit: LengthLimitSchema.nullable().default(null),
+  /** The field holds a value but the page currently shows a validation error for it (so "already correct" is not true). */
+  invalid: z.boolean().default(false),
   /** Set only when an accepted AI mapping decided the semantic type (SPEC 9.5). */
   aiMapped: z.boolean().optional(),
 });
@@ -192,6 +194,10 @@ export const FieldResultSchema = z.object({
   aiMapped: z.boolean().optional(),
   /** An answer written by the model from profile evidence; always needs the user's review (SPEC 14). */
   aiWritten: z.boolean().optional(),
+  /** Merge key within a step, and whether the action ran (a failed outcome may still have executed). */
+  fingerprint: z.string().max(300).optional(),
+  executed: z.boolean().optional(),
+  step: z.number().int().nonnegative().optional(),
   /** Names of the evidence items behind a written answer (e.g. "Project: Sales Forecaster"). */
   evidence: z.array(z.string().max(200)).max(10).optional(),
   /** SPEC 17.1: separate dimensions, never collapsed into one unexplained score. */
@@ -207,6 +213,27 @@ export const FieldResultSchema = z.object({
 });
 export type FieldResult = z.infer<typeof FieldResultSchema>;
 
+/** One page/step of a multi-step application with its real counts (SPEC 18.4). */
+export const StepSummarySchema = z.object({
+  index: z.number().int().nonnegative(),
+  url: z.string().max(300),
+  title: z.string().max(200),
+  totalFields: z.number().int().nonnegative(),
+  filled: z.number().int().nonnegative(),
+  verified: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  skippedSensitive: z.number().int().nonnegative(),
+  ambiguous: z.number().int().nonnegative(),
+  unresolved: z.number().int().nonnegative(),
+  alreadyCorrect: z.number().int().nonnegative(),
+  requiredUnresolved: z.number().int().nonnegative(),
+  /** The control that moved the run to the next step, or null on the last step reached. */
+  advancedBy: z.string().max(100).nullable(),
+  outcome: z.enum(["advanced", "stopped", "final", "blocked"]),
+  note: z.string().max(300).nullable(),
+});
+export type StepSummary = z.infer<typeof StepSummarySchema>;
+
 export const CompletionReportSchema = z.object({
   totalFields: z.number().int().nonnegative(),
   filled: z.number().int().nonnegative(),
@@ -219,6 +246,10 @@ export const CompletionReportSchema = z.object({
   requiredUnresolved: z.number().int().nonnegative(),
   aiMapped: z.number().int().nonnegative().default(0),
   aiWritten: z.number().int().nonnegative().default(0),
+  /** Per-step breakdown (a single-page form has one step). */
+  steps: z.array(StepSummarySchema).default([]),
+  /** Honest notes: blockers, unreadable frames, limits reached. Never empty when something could not be done. */
+  notes: z.array(z.string().max(300)).max(20).default([]),
   results: z.array(FieldResultSchema),
 });
 export type CompletionReport = z.infer<typeof CompletionReportSchema>;

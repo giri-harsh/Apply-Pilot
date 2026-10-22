@@ -19,3 +19,13 @@ The usage log (`AIRequestRecord`) stores provider, model, category, token counts
 
 ## Mapping cache
 The cache stores `{semantic type, profile key, confidence, time}` keyed by provider, model and a signature of the field (normalized label, control type, options hash, section). It never stores values. Negative results (the model said "unknown", or it proposed a disallowed type) are stored so the same field does not spend quota again. "Clear mapping cache" on the options page removes it.
+
+## The final-control guard (SPEC 15, 17, 21)
+The agent may click exactly one kind of control: a next-step control, and only after the step's fields are done. Everything else on a page is treated as final and is never clicked.
+- Classification (`src/content/navigation/classify.ts`): wording (submit, apply, send, finish, confirm, pay/payment, checkout, register, certify, ...), the submit button of a form that posts (`action`, `method=post` or `formaction`), a review summary page, the last step of a "Step N of N" indicator, and any button whose wording is not recognised are all final. When unsure, the answer is final.
+- A step is advanced only when there is exactly one next control and no explicitly final control beside it. Back, Save draft and unrecognised extras do not count as a reason to click and are never clicked.
+- The content script re-classifies at click time and refuses if the control is no longer the single safe next control (the page can change between the check and the click). Clicks use real pointer and mouse events on that one element and never call `form.submit()`.
+- Page text cannot change this: a button labelled "Next" that sits in a posting form is final, and wording is matched case-insensitively on visible text only.
+- Blockers (CAPTCHA, MFA/verification code, login) stop the run before anything is filled; the agent never interacts with those widgets. Cross-origin frames are listed and never entered.
+- Limits (180 s, 200 actions, 12 retries, 4 passes per step, 8 step changes) end the run BLOCKED with the limit named. Stop cancels every timer and the page-side work.
+Tests: `navigation.test.ts` (classifier cases), `run-manager.test.ts`, and `phase9.spec.ts`, whose trap, review and endless portals assert that the page's click and submit handlers never fired.

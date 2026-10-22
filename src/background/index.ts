@@ -15,6 +15,7 @@ import { AiService } from "./ai-service";
 import { getCachedJob } from "@/job/storage";
 import { JobService } from "./job-service";
 import { RunManager } from "./run-manager";
+import type { Scheduler } from "./scheduler";
 
 // Keep API keys, settings and caches out of reach of content scripts (they run in web pages' processes).
 void chrome.storage.local.setAccessLevel?.({ accessLevel: "TRUSTED_CONTEXTS" }).catch(() => undefined);
@@ -38,6 +39,38 @@ const jobs = new JobService({
   enrich: (job) => ai.enrichJob(job),
 });
 
+/**
+ * After a click that unloaded the page: resolves true once THIS tab (the active run's tab, never another) has finished
+ * loading. A same-URL reload counts too, since a form post often lands on the same address. The wait goes through the
+ * run's scheduler, so Stop cancels the listener and the timeout.
+ */
+function waitForTabLoad(tabId: number, previousUrl: string, timeoutMs: number, scheduler: Scheduler): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    let done = false;
+    let sawLoading = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      resolve(ok);
+    };
+    const onUpdated = (id: number, info: { status?: string }) => {
+      if (id !== tabId) return;
+      if (info.status === "loading") sawLoading = true;
+      if (info.status === "complete" && sawLoading) finish(true);
+    };
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    // The load may already have completed before the listener existed.
+    void chrome.tabs.get(tabId).then((t) => {
+      if (t.status === "loading") sawLoading = true;
+      // The new page may have finished loading before this listener existed: a different address that is complete is enough.
+      // (Without host access the URL is hidden from us; then only the loading -> complete event can confirm a navigation.)
+      else if (t.status === "complete" && t.url !== undefined && t.url !== previousUrl) finish(true);
+    }, () => finish(false));
+    void scheduler.sleep(timeoutMs).then(() => finish(false), () => finish(false));
+  });
+}
+
 const manager = new RunManager({
   getJob: (tabId, url) => jobs.forTab(tabId, url),
   loadRuns,
@@ -49,6 +82,7 @@ const manager = new RunManager({
     await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
   },
   sendToTab,
+  waitForNavigation: (tabId, previousUrl, timeoutMs, scheduler) => waitForTabLoad(tabId, previousUrl, timeoutMs, scheduler),
   async tabInfo(tabId) {
     try {
       const t = await chrome.tabs.get(tabId);

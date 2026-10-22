@@ -196,8 +196,11 @@ test("the request monitor used by the no-network assertions really observes traf
     // The browser may fetch /favicon.ico for the page at any moment; it is not traffic this test causes.
     if (/^https?:/.test(r.url()) && !r.url().endsWith("/favicon.ico")) seen.push(r.url());
   });
-  const before = await page.evaluate(() => performance.getEntriesByType("resource").length);
+  // Compare by name, not by count: the browser may add its own entry (for example the favicon) at any moment.
+  const names = () => page.evaluate(() => performance.getEntriesByType("resource").map((e) => e.name).filter((n) => !n.endsWith("/favicon.ico")));
+  const before = await names();
   await page.evaluate(() => fetch("/basic.html").then((r) => r.text()));
   expect(seen).toHaveLength(1);
-  expect(await page.evaluate(() => performance.getEntriesByType("resource").length)).toBe(before + 1);
+  const after = await names();
+  expect(after.slice(before.length)).toEqual([expect.stringMatching(/\/basic\.html$/)]);
 });

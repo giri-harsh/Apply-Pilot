@@ -24,6 +24,9 @@ export function buildGeminiBody(
 ) {
   let system = req.system;
   const gen: Record<string, unknown> = { temperature: 0, maxOutputTokens: req.maxOutputTokens ?? config.maxOutputTokens };
+  const think = config.geminiThinking ?? "default";
+  if (think === "minimal" || think === "low") gen.thinkingConfig = { thinkingLevel: think };
+  else if (think === "budget0") gen.thinkingConfig = { thinkingBudget: 0 };
   if (structured) {
     gen.responseMimeType = "application/json";
     if (structured.mode === "response_schema") gen.responseSchema = toGeminiSchema(structured.jsonSchema);

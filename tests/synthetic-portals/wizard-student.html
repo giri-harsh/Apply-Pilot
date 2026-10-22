@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Wizard with an unknown required field</title></head>
+<body>
+<div id="app"></div>
+<script src="/_common.js"></script>
+<script>
+  window.CFG = {
+    company: "Campus Co",
+    steps: [
+      { title: "Personal information", next: "Next", fields: [{ label: "Full name", required: true }, { label: "Email", type: "email", required: true }, { label: "Student ID", required: true }] },
+      { title: "Review your application", review: true, finalText: "Submit application", fields: [] },
+    ],
+  };
+</script>
+<script src="/_steps.js"></script>
+</body></html>

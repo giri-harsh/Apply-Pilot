@@ -39,6 +39,7 @@ const WORKING_STATES: readonly RunState[] = [
   "PLANNING",
   "FILLING",
   "VERIFYING",
+  "ADVANCING_STEP",
 ];
 
 const ABORTS: RunState[] = ["BLOCKED", "CANCELLED", "FAILED"];
@@ -51,16 +52,19 @@ const TRANSITIONS: Record<RunState, readonly RunState[]> = {
   IDLE: ["INITIALIZING"],
   INITIALIZING: ["OBSERVING", ...ABORTS],
   // A restarted service worker re-observes instead of replaying (SPEC 15.3), hence the edges back to OBSERVING.
-  OBSERVING: ["EXTRACTING_JOB", ...ABORTS],
+  // The first observation of a run reads the job; later passes and steps go straight to discovery.
+  OBSERVING: ["EXTRACTING_JOB", "DISCOVERING_FORM", ...ABORTS],
   EXTRACTING_JOB: ["DISCOVERING_FORM", "OBSERVING", ...ABORTS],
-  DISCOVERING_FORM: ["MAPPING_FIELDS", "OBSERVING", ...ABORTS],
+  // A later step with no inputs (e.g. a review page) ends the run from discovery.
+  DISCOVERING_FORM: ["MAPPING_FIELDS", "OBSERVING", "READY_FOR_REVIEW", "PARTIALLY_COMPLETED", ...ABORTS],
   MAPPING_FIELDS: ["PLANNING", "OBSERVING", ...ABORTS],
   PLANNING: ["FILLING", "OBSERVING", ...ABORTS],
   FILLING: ["VERIFYING", "OBSERVING", ...ABORTS],
-  VERIFYING: ["READY_FOR_REVIEW", "PARTIALLY_COMPLETED", "OBSERVING", ...ABORTS],
+  // After verifying: another pass (OBSERVING), the next step (ADVANCING_STEP) or the end.
+  VERIFYING: ["READY_FOR_REVIEW", "PARTIALLY_COMPLETED", "OBSERVING", "ADVANCING_STEP", ...ABORTS],
+  ADVANCING_STEP: ["OBSERVING", "READY_FOR_REVIEW", "PARTIALLY_COMPLETED", ...ABORTS],
   READY_FOR_REVIEW: ["COMPLETED", "CANCELLED"],
   TAILORING_RESUME: [],
-  ADVANCING_STEP: [],
   WAITING_FOR_USER: [],
   COMPLETED: [],
   PARTIALLY_COMPLETED: [],

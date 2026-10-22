@@ -24,6 +24,11 @@ export type ProviderConfig = {
    * Chosen from live verification, not by probing at runtime.
    */
   geminiSchemaMode?: "prompt_only" | "response_json_schema" | "response_schema";
+  /**
+   * Gemini only. How much the model "thinks" before answering; thinking is what made 3.x requests slow.
+   * "minimal"/"low" send thinkingConfig.thinkingLevel, "budget0" sends thinkingBudget 0, "default" sends nothing.
+   */
+  geminiThinking?: "minimal" | "low" | "budget0" | "default";
 };
 
 export type AIConfig = {
@@ -60,6 +65,7 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
       maxOutputTokens: 1500,
       supportsJsonSchema: true,
       geminiSchemaMode: "prompt_only",
+      geminiThinking: "minimal",
     },
     groq: {
       endpoint: "https://api.groq.com/openai/v1",
@@ -95,6 +101,7 @@ const providerOverride = z
     maxOutputTokens: z.number().int().min(64).max(8192),
     supportsJsonSchema: z.boolean(),
     geminiSchemaMode: z.enum(["prompt_only", "response_json_schema", "response_schema"]),
+    geminiThinking: z.enum(["minimal", "low", "budget0", "default"]),
   })
   .partial();
 

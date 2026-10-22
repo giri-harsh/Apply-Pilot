@@ -89,6 +89,10 @@ export const PlannedFillSchema = z.object({
   aiMapped: z.boolean().optional(),
   aiWritten: z.boolean().optional(),
   evidence: z.array(z.string().max(200)).max(10).optional(),
+  /** Stable key for the field within a step, used to merge results across passes. */
+  fingerprint: z.string().max(300).optional(),
+  /** Recovery strategy for a retry; "keyboard" types key by key (SPEC 12.12). */
+  strategy: z.enum(["default", "keyboard"]).optional(),
   confidence: z.object({ identification: z.number().min(0).max(1), mapping: z.number().min(0).max(1) }).optional(),
 });
 export type PlannedFill = z.infer<typeof PlannedFillSchema>;
@@ -108,9 +112,20 @@ export const ContentRequestSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("EXECUTE"), plan: z.array(PlannedFillSchema).max(500) }),
   z.object({ kind: z.literal("VERIFY"), plan: z.array(PlannedFillSchema).max(500) }),
   z.object({ kind: z.literal("EXTRACT_JOB"), maxChars: z.number().int().min(500).max(60000) }),
+  z.object({ kind: z.literal("WAIT_STABLE"), quietMs: z.number().int().min(20).max(5000), maxMs: z.number().int().min(50).max(15000) }),
+  z.object({ kind: z.literal("CLASSIFY_CONTROLS") }),
+  z.object({ kind: z.literal("DETECT_BLOCKERS") }),
+  z.object({ kind: z.literal("NAVIGATE"), controlId: z.string().max(20), text: z.string().max(100) }),
   z.object({ kind: z.literal("CANCEL") }),
 ]);
 export type ContentRequest = z.infer<typeof ContentRequestSchema>;
+
+export const ControlInfoSchema = z.object({
+  id: z.string().max(20),
+  text: z.string().max(100),
+  role: z.enum(["next", "final", "back", "other"]),
+  reasons: z.array(z.string().max(120)).max(4),
+});
 
 export const ExecutionResultSchema = z.object({
   fieldId: z.string(),
@@ -141,7 +156,24 @@ export const ContentResponseSchema = z.union([
     plan: z.array(PlannedFillSchema),
     skipped: z.array(FieldResultSchema),
   }),
-  z.object({ ok: z.literal(true), kind: z.literal("EXECUTED"), results: z.array(ExecutionResultSchema) }),
+  z.object({ ok: z.literal(true), kind: z.literal("EXECUTED"), results: z.array(ExecutionResultSchema), replan: z.boolean().optional() }),
+  z.object({ ok: z.literal(true), kind: z.literal("STABLE"), mutations: z.number().int(), waitedMs: z.number().int(), timedOut: z.boolean() }),
+  z.object({
+    ok: z.literal(true),
+    kind: z.literal("CONTROLS"),
+    controls: z.array(ControlInfoSchema).max(60),
+    isLastStep: z.boolean(),
+    hasReviewSummary: z.boolean(),
+    stepIndicator: z.object({ current: z.number().int(), total: z.number().int() }).nullable(),
+    next: ControlInfoSchema.nullable(),
+  }),
+  z.object({
+    ok: z.literal(true),
+    kind: z.literal("BLOCKERS"),
+    blockers: z.array(z.object({ type: z.enum(["captcha", "mfa", "login"]), detail: z.string().max(200) })).max(5),
+    frames: z.array(z.object({ origin: z.string().max(200), accessible: z.boolean(), visible: z.boolean(), width: z.number(), height: z.number() })).max(30),
+  }),
+  z.object({ ok: z.literal(true), kind: z.literal("NAVIGATED"), clicked: z.boolean(), changed: z.boolean(), reason: z.string().max(200) }),
   z.object({ ok: z.literal(true), kind: z.literal("VERIFIED"), results: z.array(VerificationResultSchema) }),
   z.object({ ok: z.literal(true), kind: z.literal("JOB_EXTRACTED"), job: JobContextSchema }),
   z.object({ ok: z.literal(true), kind: z.literal("CANCELLED") }),

@@ -338,13 +338,13 @@ test.describe("Phase 4: universal field understanding (HTTP mocked)", () => {
     expect(report.results.filter((r) => r.outcome === "skipped_third_party")).toHaveLength(4);
   });
 
-  test("dynamic conditional fields: hidden ones are not touched; ones revealed mid-run are reported as not handled yet", async () => {
+  test("dynamic conditional fields: hidden ones are not touched; ones revealed by our own fills are filled in the next pass", async () => {
     const { page, report } = await runPortal(ext, "dynamic-conditional");
     await expect(page.locator("#country")).toHaveValue("IN");
     await expect(page.locator("#state-wrap")).toBeVisible(); // revealed by our own country selection
-    await expect(page.locator("#state")).toHaveValue(""); // single observation pass: a known limitation until Phase 9
-    await expect(page.locator("#employer")).toHaveValue("");
-    expect(report.totalFields).toBe(4); // name, email, country, status (the hidden ones were not counted)
+    await expect(page.locator("#state")).toHaveValue("Maharashtra"); // Phase 9: a second observation pass finds and fills it
+    await expect(page.locator("#employer")).toHaveValue(""); // the employment status is never answered, so this stays hidden
+    expect(report.totalFields).toBe(5); // name, email, country, status, and the revealed state
   });
 });
 

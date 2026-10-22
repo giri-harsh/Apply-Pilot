@@ -9,6 +9,7 @@ import type { ExecutionResult } from "@/shared/messages";
 import { fingerprintOf } from "../observer/observe";
 import { isEnabled, isReadOnly, isVisible } from "../observer/dom";
 import { fillAutocomplete, mayClick, selectCustomOption } from "./custom";
+import { typeWithKeys } from "./keyboard";
 import { clickToggle, settle, typeInto } from "./native";
 
 export type ExecContext = {
@@ -101,7 +102,7 @@ export function validateAction(raw: unknown, ctx: ExecContext): Validation {
 }
 
 /** Runs one validated action. Never evaluates page- or model-supplied code; only calls fixed DOM helpers. */
-export async function executeAction(raw: unknown, ctx: ExecContext): Promise<ExecutionResult> {
+export async function executeAction(raw: unknown, ctx: ExecContext, strategy: "default" | "keyboard" = "default"): Promise<ExecutionResult> {
   const fieldId = typeof raw === "object" && raw && "fieldId" in raw ? String((raw as { fieldId: unknown }).fieldId) : "";
   if (ctx.isCancelled()) return { fieldId, executed: false, error: "Cancelled" };
 
@@ -113,7 +114,8 @@ export async function executeAction(raw: unknown, ctx: ExecContext): Promise<Exe
     const el = v.els[0]!;
     switch (action.type) {
       case "fill_text":
-        typeInto(el as HTMLInputElement | HTMLTextAreaElement, action.value);
+        if (strategy === "keyboard") await typeWithKeys(el as HTMLInputElement | HTMLTextAreaElement, action.value);
+        else typeInto(el as HTMLInputElement | HTMLTextAreaElement, action.value);
         break;
       case "select_option":
         typeInto(el as HTMLSelectElement, action.optionValue);

@@ -14,6 +14,13 @@ import { STATE_LABELS, isWorking } from "@/shared/state-machine";
 import { PROFILE_STORAGE_KEY, loadProfile } from "@/shared/storage";
 import "./popup.css";
 
+const STEP_OUTCOME = {
+  advanced: "moved on",
+  stopped: "stopped here",
+  final: "final step, left for you",
+  blocked: "blocked",
+} as const;
+
 const send = (req: BackgroundRequest): Promise<BackgroundResponse> =>
   sendValidated((m) => chrome.runtime.sendMessage(m), BackgroundRequestSchema, BackgroundResponseSchema, req);
 
@@ -161,6 +168,25 @@ function Popup() {
         )}
         {error && <p role="alert" className="error">{error}</p>}
       </section>
+
+      {run && (run.steps.length > 0 || working) && (
+        <section data-testid="steps" className="report">
+          <h2>Steps</h2>
+          <ol>
+            {(rep?.steps ?? run.steps).map((s) => (
+              <li key={s.index} data-testid={`step-${s.index}`} data-outcome={s.outcome}>
+                Step {s.index + 1}{s.title ? `: ${s.title}` : ""}: {s.verified} verified, {s.failed} failed
+                {s.requiredUnresolved > 0 ? `, ${s.requiredUnresolved} required unresolved` : ""}
+                {" "}({STEP_OUTCOME[s.outcome]}{s.advancedBy ? ` via "${s.advancedBy}"` : ""})
+              </li>
+            ))}
+            {working && <li data-testid="step-current">Working on step {run.steps.length + 1}...</li>}
+          </ol>
+          <p className="note">
+            Actions: {run.counters.actions}, retries: {run.counters.retries}, passes: {run.counters.passes}, step changes: {run.counters.transitions}
+          </p>
+        </section>
+      )}
 
       {rep && (
         <section data-testid="report" className="report">

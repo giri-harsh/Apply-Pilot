@@ -15,6 +15,8 @@ export class AIError extends Error {
   constructor(
     readonly kind: AIErrorKind,
     readonly code: string,
+    /** Provider's own error message for 400/404 (names the offending request field). Diagnostics only; never persisted. */
+    readonly detail?: string,
   ) {
     super(`${kind}:${code}`);
     this.name = "AIError";
@@ -32,7 +34,23 @@ export function classifyHttpError(status: number, body: string): AIError {
     return new AIError(/quota|billing|per day|daily|exceeded your current/.test(lower) ? "quota" : "rate_limit", code);
   }
   if (status >= 500) return new AIError("network", code);
-  return new AIError("unknown", code);
+  return new AIError("unknown", code, status === 400 || status === 404 ? safeDetail(body) : undefined);
+}
+
+/** The provider's error.message (and field violations), with anything key-like removed and a hard length cap. */
+export function safeDetail(body: string): string | undefined {
+  try {
+    const e = (JSON.parse(body) as { error?: { message?: unknown; details?: unknown } }).error;
+    const parts = [typeof e?.message === "string" ? e.message : ""];
+    const details = JSON.stringify(e?.details ?? "");
+    if (details.length > 2) parts.push(details);
+    return parts
+      .join(" | ")
+      .replace(/AIza[\w-]{10,}|gsk_[\w]{10,}|Bearer\s+\S+|[A-Za-z0-9_-]{32,}/g, "[redacted]")
+      .slice(0, 400);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Only these justify switching to the secondary provider (SPEC 13.5). */

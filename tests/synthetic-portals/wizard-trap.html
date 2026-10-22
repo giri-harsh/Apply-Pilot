@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Continue that really submits</title></head>
+<body>
+<div id="app"></div>
+<script src="/_common.js"></script>
+<script>
+  // "Continue" is the submit button of a form that posts to a server: pressing it sends the application.
+  window.CFG = {
+    company: "Trap Co",
+    formAction: "/api/apply",
+    nextSubmits: true,
+    steps: [
+      { title: "Personal information", next: "Continue", fields: [{ label: "Full name", required: true }, { label: "Email", type: "email", required: true }] },
+      { title: "More", next: "Continue", fields: [{ label: "City" }] },
+    ],
+  };
+</script>
+<script src="/_steps.js"></script>
+</body></html>

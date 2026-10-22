@@ -23,6 +23,12 @@ describe("run state machine", () => {
     ["IDLE", "INITIALIZING"],
     ["INITIALIZING", "OBSERVING"],
     ["OBSERVING", "EXTRACTING_JOB"],
+    ["OBSERVING", "DISCOVERING_FORM"], // later passes and later steps skip job extraction
+    ["VERIFYING", "ADVANCING_STEP"],
+    ["VERIFYING", "OBSERVING"],
+    ["ADVANCING_STEP", "OBSERVING"],
+    ["ADVANCING_STEP", "READY_FOR_REVIEW"],
+    ["DISCOVERING_FORM", "OBSERVING"],
     ["EXTRACTING_JOB", "DISCOVERING_FORM"],
     ["EXTRACTING_JOB", "OBSERVING"],
     ["EXTRACTING_JOB", "BLOCKED"],
@@ -50,7 +56,6 @@ describe("run state machine", () => {
     ["IDLE", "FILLING"],
     ["IDLE", "READY_FOR_REVIEW"],
     ["INITIALIZING", "FILLING"],
-    ["OBSERVING", "DISCOVERING_FORM"], // job extraction always sits in between now
     ["EXTRACTING_JOB", "MAPPING_FIELDS"],
     ["EXTRACTING_JOB", "FILLING"],
     ["IDLE", "EXTRACTING_JOB"],

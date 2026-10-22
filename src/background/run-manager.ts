@@ -1,14 +1,17 @@
-import type { CompletionReport, FieldResult, FormField } from "@/shared/form";
+import type { AcceptedMapping } from "@/ai/classify/validate";
+import type { JobSummary } from "@/job/schema";
+import type { CompletionReport, FieldResult, FormField, StepSummary } from "@/shared/form";
 import type { ContentRequest, ContentResponse, ErrorResponse, PlannedFill } from "@/shared/messages";
 import type { UserProfile } from "@/shared/profile";
-import { buildReport } from "@/shared/report";
+import { StepAccumulator, combineReport, type StepRecordLike } from "@/shared/report";
 import type { RunRecord, RunsMap } from "@/shared/run";
-import type { JobSummary } from "@/job/schema";
-import type { AcceptedMapping } from "@/ai/classify/validate";
 import { InvalidTransitionError, assertTransition, isTerminal, isWorking, type RunState } from "@/shared/state-machine";
+import { Abort, LimitReached } from "./abort";
+import { DEFAULT_LIMITS, type RunLimits } from "./limits";
+import { Scheduler } from "./scheduler";
 
-export type RunLimits = { maxDurationMs: number; maxFields: number; stepTimeoutMs: number };
-export const DEFAULT_LIMITS: RunLimits = { maxDurationMs: 90_000, maxFields: 300, stepTimeoutMs: 20_000 };
+export { DEFAULT_LIMITS };
+export type { RunLimits };
 
 export type AiClassifyInput = { fields: FormField[]; skipped: FieldResult[]; requestsRemaining: number };
 export type AiClassifyResult = {
@@ -47,26 +50,39 @@ export interface RunDeps {
   injectContent(tabId: number): Promise<void>;
   sendToTab(tabId: number, req: ContentRequest): Promise<ContentResponse>;
   tabInfo(tabId: number): Promise<{ url: string; title: string } | null>;
+  /** Resolves true when the tab finished loading a different page after a click that navigated. */
+  waitForNavigation?(tabId: number, previousUrl: string, timeoutMs: number, scheduler: Scheduler): Promise<boolean>;
   now(): number;
   newId(): string;
-  limits?: RunLimits;
+  limits?: Partial<RunLimits>;
 }
 
 export type StartResult = { ok: true; run: RunRecord } | ErrorResponse;
 
 const key = (tabId: number) => String(tabId);
+const failureKey = (p: PlannedFill) => p.fingerprint ?? `${p.semanticType}|${p.label}`;
+const origin = (url: string) => {
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`.slice(0, 300);
+  } catch {
+    return url.slice(0, 300);
+  }
+};
 
-class Abort extends Error {}
+type StepRecord = StepRecordLike;
+type OkResponse = Extract<ContentResponse, { ok: true }>;
 
 export class RunManager {
   private runs: RunsMap = {};
   private loaded: Promise<void> | null = null;
   private saveChain: Promise<void> = Promise.resolve();
   private starting = new Set<number>();
+  private schedulers = new Map<string, Scheduler>();
   private limits: RunLimits;
 
   constructor(private deps: RunDeps) {
-    this.limits = deps.limits ?? DEFAULT_LIMITS;
+    this.limits = { ...DEFAULT_LIMITS, ...deps.limits };
   }
 
   private ensureLoaded(): Promise<void> {
@@ -80,6 +96,17 @@ export class RunManager {
     const snapshot = structuredClone(this.runs);
     this.saveChain = this.saveChain.then(() => this.deps.saveRuns(snapshot));
     return this.saveChain;
+  }
+
+  private scheduler(runId: string): Scheduler {
+    let s = this.schedulers.get(runId);
+    if (!s) this.schedulers.set(runId, (s = new Scheduler()));
+    return s;
+  }
+
+  /** Test hook: how many timers a run still has pending. */
+  pendingTimers(runId: string): number {
+    return this.schedulers.get(runId)?.pending ?? 0;
   }
 
   async get(tabId: number): Promise<RunRecord | null> {
@@ -97,6 +124,14 @@ export class RunManager {
     this.runs[key(tabId)] = next;
     await this.persist();
     return next;
+  }
+
+  /** Updates a run without changing its state (counters, notes, checkpoints). */
+  private async update(runId: string, tabId: number, patch: Partial<RunRecord>): Promise<void> {
+    this.assertActive(runId, tabId);
+    const run = this.runs[key(tabId)]!;
+    this.runs[key(tabId)] = { ...run, ...patch, updatedAt: this.deps.now() };
+    await this.persist();
   }
 
   /** Quick Apply. Guards against a second concurrent run on the same tab before any await. */
@@ -128,6 +163,9 @@ export class RunManager {
         report: null,
         job: null,
         answers: [],
+        steps: [],
+        counters: { actions: 0, retries: 0, passes: 0, transitions: 0 },
+        notes: [],
         reason: null,
         ai: { status: "off", requests: 0, cacheHits: 0, accepted: 0, provider: null, error: null },
       };
@@ -146,6 +184,8 @@ export class RunManager {
     if (!run || isTerminal(run.state) || run.state === "IDLE") {
       return { ok: false, code: "NO_RUN", message: "No active run on this tab" };
     }
+    // Cancel timers first so nothing can fire after Stop, then record the cancellation.
+    this.schedulers.get(run.runId)?.cancelAll();
     const next = await this.move(run.runId, tabId, "CANCELLED", { reason: "Stopped by user" }).catch((e) => {
       if (e instanceof Abort) return this.runs[key(tabId)]!;
       throw e;
@@ -156,8 +196,9 @@ export class RunManager {
   }
 
   /**
-   * Called when the service worker wakes. In-flight runs are re-observed, never replayed (SPEC 15.3):
-   * the pipeline is idempotent because the mapper skips fields that already hold the profile value.
+   * Called when the service worker wakes. In-flight runs are re-observed, never replayed (SPEC 15.3): the
+   * pipeline is idempotent because the mapper skips fields that already hold the profile value, and the
+   * checkpointed steps and counters are kept.
    */
   async rehydrate(): Promise<void> {
     await this.ensureLoaded();
@@ -188,11 +229,11 @@ export class RunManager {
     if (!run || run.runId !== runId || isTerminal(run.state)) throw new Abort("Run is no longer active");
   }
 
-  private async call(runId: string, tabId: number, req: ContentRequest): Promise<ContentResponse> {
+  private async call(runId: string, tabId: number, req: ContentRequest, timeoutMs = this.limits.stepTimeoutMs): Promise<ContentResponse> {
     this.assertActive(runId, tabId); // a cancelled run must not schedule any further page work
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, rej) => {
-      timer = setTimeout(() => rej(new Error("Page did not respond in time")), this.limits.stepTimeoutMs);
+      timer = setTimeout(() => rej(new Error("Page did not respond in time")), timeoutMs);
     });
     try {
       return await Promise.race([this.deps.sendToTab(tabId, req), timeout]);
@@ -201,8 +242,15 @@ export class RunManager {
     }
   }
 
-  private checkBudget(startedAt: number): void {
-    if (this.deps.now() - startedAt > this.limits.maxDurationMs) throw new Error("Run exceeded its time limit");
+  private async expect<K extends OkResponse["kind"]>(runId: string, tabId: number, req: ContentRequest, kind: K): Promise<Extract<OkResponse, { kind: K }>> {
+    const r = await this.call(runId, tabId, req);
+    if (!r.ok) throw new Error(r.message);
+    if (r.kind !== kind) throw new Error("Unexpected reply");
+    return r as Extract<OkResponse, { kind: K }>;
+  }
+
+  private checkDuration(startedAt: number): void {
+    if (this.deps.now() - startedAt > this.limits.maxDurationMs) throw new LimitReached("duration", "the time limit for one run");
   }
 
   private async drive(runId: string, tabId: number, startedAt: number): Promise<void> {
@@ -212,131 +260,340 @@ export class RunManager {
       if (e instanceof Abort) return; // cancelled or replaced: nothing further may be scheduled
       const reason = e instanceof Error ? e.message.slice(0, 200) : "Unexpected error";
       await this.move(runId, tabId, "FAILED", { reason }).catch(() => undefined);
+    } finally {
+      const run = this.runs[key(tabId)];
+      if (!run || run.runId !== runId || isTerminal(run.state)) this.schedulers.delete(runId);
     }
   }
 
-  private async blocked(runId: string, tabId: number, reason: string, patch: Partial<RunRecord> = {}): Promise<void> {
-    await this.move(runId, tabId, "BLOCKED", { ...patch, reason });
-  }
-
   private async pipeline(runId: string, tabId: number, startedAt: number): Promise<void> {
-    const cur = () => this.runs[key(tabId)];
-    if (cur()?.state === "INITIALIZING") await this.move(runId, tabId, "OBSERVING");
+    const cur = () => this.runs[key(tabId)]!;
+    const L = this.limits;
+    const sched = this.scheduler(runId);
+    if (cur().state === "INITIALIZING") await this.move(runId, tabId, "OBSERVING");
+
+    // Everything below is resumable: steps and counters live on the run record, the rest is re-observed.
+    const steps: StepRecord[] = cur().steps.map((s) => ({ ...s }));
+    const notes: string[] = [...cur().notes];
+    let counters = { ...cur().counters };
+    let frameWarning = false;
+    let answers = [...cur().answers];
+    let ai = cur().ai;
+    let jobDone = cur().job !== null || steps.length > 0;
+
+    const addNote = (n: string) => {
+      if (!notes.includes(n)) notes.push(n);
+    };
+    const saveCounters = (patch: Partial<typeof counters> = {}) => {
+      counters = { ...counters, ...patch };
+      return this.update(runId, tabId, { counters, notes, answers, ai });
+    };
+
+    // Terminal helpers: every ending carries the real report built from the steps so far.
+    const report = (current?: StepRecord): CompletionReport => combineReport(current ? [...steps, current] : steps, notes);
+    const blockedWith = async (reason: string, current?: StepRecord) => {
+      addNote(reason);
+      await this.move(runId, tabId, "BLOCKED", { reason, report: report(current), steps: current ? [...steps, current] : steps, counters, notes, answers, ai });
+    };
+    const finishWith = async (state: "READY_FOR_REVIEW" | "PARTIALLY_COMPLETED", current: StepRecord) => {
+      const all = [...steps, current];
+      await this.move(runId, tabId, state, { report: report(current), steps: all, counters, notes, answers, ai });
+    };
 
     try {
       await this.deps.injectContent(tabId);
     } catch {
-      return this.blocked(runId, tabId, "Cannot access this page (restricted page or permission not granted)");
+      return blockedWith("Cannot access this page (restricted page or permission not granted)");
     }
-
-    this.checkBudget(startedAt);
-    const obs = await this.call(runId, tabId, { kind: "OBSERVE" });
-    if (!obs.ok || obs.kind !== "OBSERVED") throw new Error(obs.ok ? "Unexpected reply" : obs.message);
-    const fields: FormField[] = obs.fields;
-    const visible = fields.filter((f) => f.visible);
-    await this.move(runId, tabId, "EXTRACTING_JOB", { url: obs.url, pageTitle: obs.pageTitle });
-    let job: JobSummary | null = null;
-    if (this.deps.getJob) {
-      this.assertActive(runId, tabId);
-      job = await this.deps.getJob(tabId, obs.url).catch(() => null);
-    }
-    await this.move(runId, tabId, "DISCOVERING_FORM", { fieldsDiscovered: visible.length, job });
-    if (visible.length === 0) return this.blocked(runId, tabId, "No form fields found on this page");
-    if (fields.length > this.limits.maxFields) return this.blocked(runId, tabId, "Too many form fields for one run");
-
-    // Mapping needs the profile; without one we stop honestly after having inspected the page.
     const profile = await this.deps.loadProfile();
-    if (!profile) return this.blocked(runId, tabId, "No valid profile saved. Open Settings and complete your profile.");
 
-    this.checkBudget(startedAt);
-    await this.move(runId, tabId, "MAPPING_FIELDS");
-    const mapped = await this.call(runId, tabId, { kind: "MAP", profile });
-    if (!mapped.ok || mapped.kind !== "MAPPED") throw new Error(mapped.ok ? "Unexpected reply" : mapped.message);
-    const plan: PlannedFill[] = [...mapped.plan];
-    let skipped: FieldResult[] = [...mapped.skipped];
+    try {
+      for (;;) {
+        // ------------------------------------------------------------------ one step (one page of the application)
+        const stepIndex = steps.length;
+        const acc = new StepAccumulator();
+        const attempts = new Map<string, number>();
+        const lastReason = new Map<string, string>();
+        const disabledSeen = new Map<string, number>();
+        const askedClassify = new Set<string>();
+        const askedAnswers = new Set<string>();
+        const classifyMemo = new Map<string, AcceptedMapping>();
+        let stepUrl = cur().url;
+        let stepTitle = cur().pageTitle;
+        let stepFields = 0;
+        let moreWork = false;
 
-    // Phase 4: ask the AI only about fields the rules could not place. A failure here never stops the run.
-    const runNow = cur()!;
-    let ai: RunRecord["ai"] = runNow.ai;
-    let aiAccepted: AcceptedMapping[] = [];
-    if (this.deps.classifyAi) {
-      this.assertActive(runId, tabId);
-      const limit = this.deps.aiRequestLimit ?? 6;
-      try {
-        const r = await this.deps.classifyAi({ fields, skipped, requestsRemaining: Math.max(0, limit - runNow.ai.requests) });
-        aiAccepted = r.accepted;
-        ai = {
-          status: r.status,
-          requests: runNow.ai.requests + r.requests,
-          cacheHits: runNow.ai.cacheHits + r.cacheHits,
-          accepted: r.accepted.length,
-          provider: r.provider,
-          error: r.error,
-        };
-      } catch {
-        ai = { ...runNow.ai, status: "unavailable", error: "unexpected" };
+        const stepRecord = (outcome: StepSummary["outcome"], advancedBy: string | null, note: string | null): StepRecord => ({
+          index: stepIndex,
+          url: origin(stepUrl),
+          title: stepTitle.slice(0, 200),
+          ...acc.counts(),
+          totalFields: acc.list().length,
+          advancedBy,
+          outcome,
+          note,
+          results: acc.list().slice(0, 80),
+        });
+
+        for (let pass = 0; ; pass++) {
+          this.checkDuration(startedAt);
+          if (pass >= L.maxPassesPerStep) {
+            if (moreWork) throw new LimitReached("passes", `${L.maxPassesPerStep} observe-and-fill passes on one step`);
+            break;
+          }
+
+          // ---- observe
+          const obs = await this.expect(runId, tabId, { kind: "OBSERVE" }, "OBSERVED");
+          stepUrl = obs.url;
+          stepTitle = obs.pageTitle;
+          const visible = obs.fields.filter((f) => f.visible);
+          stepFields = Math.max(stepFields, visible.length);
+
+          // ---- blockers and unreadable frames are checked at the start of every step
+          if (pass === 0) {
+            const det = await this.expect(runId, tabId, { kind: "DETECT_BLOCKERS" }, "BLOCKERS");
+            if (det.blockers.length > 0) {
+              const b = det.blockers[0]!;
+              return await blockedWith(`${b.detail}. ApplyPilot never tries to get past this; do it yourself and run Quick Apply again.`, stepRecord("blocked", null, b.type));
+            }
+            const hidden = det.frames.filter((f) => f.visible && f.width >= 40 && f.height >= 40);
+            if (hidden.length > 0 && !frameWarning) {
+              frameWarning = true;
+              addNote(`${hidden.length} embedded frame(s) on this page cannot be read or filled (${[...new Set(hidden.map((f) => f.origin))].join(", ")}). Any fields inside them need your attention.`);
+            }
+          }
+
+          // ---- job (first observation of the run only), then discovery
+          if (!jobDone) {
+            await this.move(runId, tabId, "EXTRACTING_JOB", { url: obs.url, pageTitle: obs.pageTitle });
+            let job: JobSummary | null = null;
+            if (this.deps.getJob) {
+              this.assertActive(runId, tabId);
+              job = await this.deps.getJob(tabId, obs.url).catch(() => null);
+            }
+            jobDone = true;
+            await this.move(runId, tabId, "DISCOVERING_FORM", { fieldsDiscovered: visible.length, job });
+          } else {
+            await this.move(runId, tabId, "DISCOVERING_FORM", { url: obs.url, pageTitle: obs.pageTitle, fieldsDiscovered: visible.length });
+          }
+          if (visible.length === 0) {
+            if (stepIndex === 0 && pass === 0) return await blockedWith("No form fields found on this page", stepRecord("blocked", null, "No form fields"));
+            // A later page without inputs (for example a review page): nothing more to fill.
+            const last = stepRecord("final", null, "No fields on this page");
+            return await finishWith(frameWarning ? "PARTIALLY_COMPLETED" : "READY_FOR_REVIEW", last);
+          }
+          if (visible.length > L.maxFields) return await blockedWith("Too many form fields for one run", stepRecord("blocked", null, "Too many fields"));
+          if (!profile) return await blockedWith("No valid profile saved. Open Settings and complete your profile.", stepRecord("blocked", null, "No profile"));
+
+          // ---- map (deterministic), then AI field understanding, then open-ended answers
+          await this.move(runId, tabId, "MAPPING_FIELDS");
+          const mapped = await this.expect(runId, tabId, { kind: "MAP", profile }, "MAPPED");
+          const plan: PlannedFill[] = [...mapped.plan];
+          let skipped: FieldResult[] = [...mapped.skipped];
+          const fields: FormField[] = obs.fields;
+
+          let aiAccepted: AcceptedMapping[] = [];
+          const limit = this.deps.aiRequestLimit ?? 6;
+          const fpOf = new Map(fields.map((f) => [f.fieldId, f.fingerprint]));
+          const idOf = new Map(fields.map((f) => [f.fingerprint, f.fieldId]));
+          // Each field is put to the AI at most once per step: later passes re-use the answer, they never re-ask.
+          const unasked = (list: FieldResult[], seen: Set<string>) => list.filter((s) => !seen.has(fpOf.get(s.fieldId) ?? ""));
+          const markAsked = (list: FieldResult[], seen: Set<string>) => list.forEach((s) => seen.add(fpOf.get(s.fieldId) ?? ""));
+          if (this.deps.classifyAi) {
+            this.assertActive(runId, tabId);
+            try {
+              const fresh = unasked(skipped, askedClassify);
+              markAsked(fresh, askedClassify);
+              const r = await this.deps.classifyAi({ fields, skipped: fresh, requestsRemaining: Math.max(0, limit - ai.requests) });
+              for (const m of r.accepted) {
+                const fp = fpOf.get(m.fieldId);
+                if (fp) classifyMemo.set(fp, m);
+              }
+              // Accepted mappings from earlier passes still apply to fields that remain unresolved (recovery of AI-mapped fields).
+              const remembered: AcceptedMapping[] = [];
+              for (const [fp, m] of classifyMemo) {
+                const id = idOf.get(fp);
+                if (id && !r.accepted.some((a) => a.fieldId === id) && skipped.some((s) => s.fieldId === id)) remembered.push({ ...m, fieldId: id });
+              }
+              aiAccepted = [...r.accepted, ...remembered];
+              ai = {
+                status: r.status === "off" && ai.status !== "off" ? ai.status : r.status,
+                requests: ai.requests + r.requests,
+                cacheHits: ai.cacheHits + r.cacheHits,
+                accepted: ai.accepted + r.accepted.length,
+                provider: r.provider ?? ai.provider,
+                error: r.error ?? ai.error,
+              };
+            } catch {
+              ai = { ...ai, status: "unavailable", error: "unexpected" };
+            }
+          }
+
+          await this.move(runId, tabId, "PLANNING", { ai });
+          if (aiAccepted.length > 0) {
+            const mappedAi = await this.expect(
+              runId,
+              tabId,
+              {
+                kind: "MAP_AI",
+                profile,
+                mappings: aiAccepted.map((m) => ({ fieldId: m.fieldId, semanticType: m.semanticType, profileKey: m.profileKey, confidence: m.confidence })),
+              },
+              "MAPPED",
+            );
+            const touched = new Set([...mappedAi.plan.map((p) => p.fieldId), ...mappedAi.skipped.map((x) => x.fieldId)]);
+            skipped = skipped.filter((x) => !touched.has(x.fieldId));
+            plan.push(...mappedAi.plan);
+            skipped.push(...mappedAi.skipped);
+          }
+
+          if (this.deps.answerQuestions) {
+            this.assertActive(runId, tabId);
+            try {
+              const fresh = unasked(skipped, askedAnswers);
+              markAsked(fresh, askedAnswers);
+              const r = await this.deps.answerQuestions({ fields, skipped: fresh, profile, url: obs.url, requestsRemaining: Math.max(0, limit - ai.requests) });
+              const touched = new Set([...r.plan.map((p) => p.fieldId), ...r.results.map((x) => x.fieldId)]);
+              skipped = skipped.filter((x) => !touched.has(x.fieldId));
+              plan.push(...r.plan);
+              skipped.push(...r.results);
+              answers = [...answers.filter((a) => !r.answers.some((n) => n.fieldId === a.fieldId && n.label === a.label)), ...r.answers].slice(-20);
+              // Only let this phase change the status when it actually used or failed the AI; "nothing to answer" says nothing.
+              const usedAi = r.requests > 0 || r.cacheHits + r.memoryHits > 0 || r.error !== null || r.plan.length > 0;
+              ai = {
+                ...ai,
+                status: !usedAi ? ai.status : ai.status === "unavailable" || r.status === "unavailable" ? "unavailable" : "used",
+                requests: ai.requests + r.requests,
+                cacheHits: ai.cacheHits + r.cacheHits + r.memoryHits,
+                error: ai.error ?? r.error,
+              };
+            } catch {
+              ai = { ...ai, status: "unavailable", error: ai.error ?? "unexpected" };
+            }
+          }
+
+          // ---- bounded recovery (SPEC 11.7): a field that already failed gets a different strategy, then is given up
+          const runnable: PlannedFill[] = [];
+          for (const p of plan) {
+            const n = attempts.get(failureKey(p)) ?? 0;
+            if (n > L.maxRecoveryAttempts) {
+              acc.addPass([], [{ fieldId: p.fieldId, label: p.label, outcome: "failed", required: p.required, reason: `Recovery exhausted: ${lastReason.get(failureKey(p)) ?? "the field could not be filled"}`.slice(0, 280), semanticType: p.semanticType, fingerprint: p.fingerprint, executed: false }], [], []);
+              continue;
+            }
+            runnable.push(n >= L.maxRecoveryAttempts ? { ...p, strategy: "keyboard" } : p);
+          }
+          const retrying = runnable.filter((p) => (attempts.get(failureKey(p)) ?? 0) > 0).length;
+          if (counters.retries + retrying > L.maxRetries) throw new LimitReached("retries", `${L.maxRetries} retried actions`);
+          if (counters.actions + runnable.length > L.maxActions) throw new LimitReached("actions", `${L.maxActions} actions`);
+
+          // ---- fill
+          await this.move(runId, tabId, "FILLING", { ai, answers });
+          let executed: { fieldId: string; executed: boolean; error: string | null }[] = [];
+          let replan = false;
+          if (runnable.length > 0) {
+            this.checkDuration(startedAt);
+            const ex = await this.expect(runId, tabId, { kind: "EXECUTE", plan: runnable }, "EXECUTED");
+            executed = ex.results;
+            replan = Boolean(ex.replan);
+          }
+          await this.move(runId, tabId, "VERIFYING");
+          let verified: { fieldId: string; verified: boolean; reason: string }[] = [];
+          const ran = runnable.filter((p) => executed.find((e) => e.fieldId === p.fieldId)?.executed);
+          if (ran.length > 0) verified = (await this.expect(runId, tabId, { kind: "VERIFY", plan: ran }, "VERIFIED")).results;
+
+          if (replan) {
+            // The page changed under the plan: not a failure, just plan again from a fresh observation.
+            acc.addPass([], skipped, [], []);
+            counters = { ...counters, passes: counters.passes + 1 };
+            await saveCounters();
+            moreWork = true;
+            await this.move(runId, tabId, "OBSERVING");
+            continue;
+          }
+
+          acc.addPass(runnable, skipped, executed, verified);
+          for (const p of runnable) {
+            const ok = verified.find((v) => v.fieldId === p.fieldId)?.verified === true;
+            if (!ok) {
+              const k = failureKey(p);
+              attempts.set(k, (attempts.get(k) ?? 0) + 1);
+              lastReason.set(k, verified.find((v) => v.fieldId === p.fieldId)?.reason ?? executed.find((e) => e.fieldId === p.fieldId)?.error ?? "not verified");
+            }
+          }
+          counters = { actions: counters.actions + executed.filter((e) => e.executed).length, retries: counters.retries + retrying, passes: counters.passes + 1, transitions: counters.transitions };
+          await saveCounters();
+
+          // ---- let the page settle (debounced mutation observer in the page), then decide whether another pass is needed
+          if (runnable.length > 0) await this.expect(runId, tabId, { kind: "WAIT_STABLE", quietMs: L.settleQuietMs, maxMs: L.settleMaxMs }, "STABLE");
+          const retryable = runnable.some((p) => (attempts.get(failureKey(p)) ?? 0) > 0 && (attempts.get(failureKey(p)) ?? 0) <= L.maxRecoveryAttempts + 1 && !verified.find((v) => v.fieldId === p.fieldId)?.verified);
+          // A recognised field that is disabled right now may be enabled a moment later: look again, a bounded number of times.
+          const disabledNow = skipped.filter((s) => /disabled or read-only/.test(s.reason) && s.semanticType !== "unknown");
+          const waitingOnDisabled = disabledNow.filter((s) => (disabledSeen.get(s.fingerprint ?? s.fieldId) ?? 0) < L.maxRecoveryAttempts);
+          for (const s of waitingOnDisabled) disabledSeen.set(s.fingerprint ?? s.fieldId, (disabledSeen.get(s.fingerprint ?? s.fieldId) ?? 0) + 1);
+          if (waitingOnDisabled.length > 0) await sched.sleep(L.disabledRetryMs);
+          moreWork = runnable.length > 0 || retryable || waitingOnDisabled.length > 0;
+          if (!moreWork) break; // converged: this pass found nothing left to do
+          await this.move(runId, tabId, "OBSERVING");
+        }
+
+        // ------------------------------------------------------------------ form-level verification (SPEC 18.2)
+        const counts = acc.counts();
+        if (counts.requiredUnresolved > 0) {
+          const note = `${counts.requiredUnresolved} required field(s) on this page are not filled, so ApplyPilot did not move to the next step`;
+          addNote(note);
+          return await finishWith(frameWarning ? "PARTIALLY_COMPLETED" : "READY_FOR_REVIEW", stepRecord("stopped", null, note));
+        }
+
+        // ------------------------------------------------------------------ next-step detection by context (SPEC 15.1)
+        const ctl = await this.expect(runId, tabId, { kind: "CLASSIFY_CONTROLS" }, "CONTROLS");
+        const next = ctl.next;
+        if (!next) {
+          const why = ctl.hasReviewSummary || ctl.isLastStep ? "Reached the final step; it needs your review and submission" : "No safe next-step control was found; stopping for your review";
+          return await finishWith(frameWarning ? "PARTIALLY_COMPLETED" : "READY_FOR_REVIEW", stepRecord("final", null, why));
+        }
+        if (counters.transitions >= L.maxStepTransitions) throw new LimitReached("steps", `${L.maxStepTransitions} step transitions`);
+
+        await this.move(runId, tabId, "ADVANCING_STEP");
+        const previousUrl = stepUrl;
+        let navigated = false;
+        try {
+          const nav = await this.expect(runId, tabId, { kind: "NAVIGATE", controlId: next.id, text: next.text }, "NAVIGATED");
+          if (!nav.clicked) {
+            const note = `Did not move on: ${nav.reason}`;
+            addNote(note);
+            return await finishWith(frameWarning ? "PARTIALLY_COMPLETED" : "READY_FOR_REVIEW", stepRecord("stopped", null, note));
+          }
+          if (!nav.changed) {
+            const note = `"${next.text}" did not change the page; stopping instead of clicking again`;
+            addNote(note);
+            return await finishWith(frameWarning ? "PARTIALLY_COMPLETED" : "READY_FOR_REVIEW", stepRecord("stopped", null, note));
+          }
+        } catch (e) {
+          if (e instanceof Abort) throw e;
+          // The page unloaded (full navigation) before it could answer: wait for the new page, then re-inject.
+          navigated = this.deps.waitForNavigation ? await this.deps.waitForNavigation(tabId, previousUrl, L.navigationTimeoutMs, sched) : false;
+          if (!navigated) return await blockedWith("The page did not respond after moving to the next step", stepRecord("blocked", next.text, "No response after next"));
+          try {
+            await this.deps.injectContent(tabId);
+          } catch {
+            return await blockedWith("Permission lost after navigation: the browser no longer lets ApplyPilot read this page. Click the ApplyPilot icon on the new page and run Quick Apply again.", stepRecord("advanced", next.text, "Navigated"));
+          }
+        }
+
+        // checkpoint (SPEC 15.3): the step is done; resume continues from a fresh observation of the new page
+        steps.push(stepRecord("advanced", next.text, null));
+        counters = { ...counters, transitions: counters.transitions + 1 };
+        await this.update(runId, tabId, { steps, counters, notes, answers, ai });
+        await this.move(runId, tabId, "OBSERVING");
+        void stepFields;
       }
-    }
-
-    await this.move(runId, tabId, "PLANNING", { ai });
-    if (aiAccepted.length > 0) {
-      const mappedAi = await this.call(runId, tabId, {
-        kind: "MAP_AI",
-        profile,
-        mappings: aiAccepted.map((m) => ({ fieldId: m.fieldId, semanticType: m.semanticType, profileKey: m.profileKey, confidence: m.confidence })),
-      });
-      if (!mappedAi.ok || mappedAi.kind !== "MAPPED") throw new Error(mappedAi.ok ? "Unexpected reply" : mappedAi.message);
-      const touched = new Set([...mappedAi.plan.map((p) => p.fieldId), ...mappedAi.skipped.map((x) => x.fieldId)]);
-      skipped = skipped.filter((x) => !touched.has(x.fieldId));
-      plan.push(...mappedAi.plan);
-      skipped.push(...mappedAi.skipped);
-    }
-
-    // Phase 6: open-ended questions. The deterministic partition runs first; only answerable ones reach a model,
-    // and every answer is grounded before it can become an action. A failure here never stops the run.
-    let answers: RunRecord["answers"] = [];
-    if (this.deps.answerQuestions) {
-      this.assertActive(runId, tabId);
-      const limit = this.deps.aiRequestLimit ?? 6;
-      try {
-        const r = await this.deps.answerQuestions({ fields, skipped, profile, url: obs.url, requestsRemaining: Math.max(0, limit - ai.requests) });
-        const touched = new Set([...r.plan.map((p) => p.fieldId), ...r.results.map((x) => x.fieldId)]);
-        skipped = skipped.filter((x) => !touched.has(x.fieldId));
-        plan.push(...r.plan);
-        skipped.push(...r.results);
-        answers = r.answers;
-        // Only let this phase change the status when it actually used or failed the AI; "nothing to answer" says nothing.
-        const usedAi = r.requests > 0 || r.cacheHits + r.memoryHits > 0 || r.error !== null || r.plan.length > 0;
-        ai = {
-          ...ai,
-          status: !usedAi ? ai.status : ai.status === "unavailable" || r.status === "unavailable" ? "unavailable" : "used",
-          requests: ai.requests + r.requests,
-          cacheHits: ai.cacheHits + r.cacheHits + r.memoryHits,
-          error: ai.error ?? r.error,
-        };
-      } catch {
-        ai = { ...ai, status: "unavailable", error: ai.error ?? "unexpected" };
+    } catch (e) {
+      if (e instanceof LimitReached) {
+        await blockedWith(`Stopped: run limit reached (${e.message}). Review what was filled and continue yourself.`).catch(() => undefined);
+        return;
       }
+      throw e;
     }
-
-    let executed: { fieldId: string; executed: boolean; error: string | null }[] = [];
-    let verified: { fieldId: string; verified: boolean; reason: string }[] = [];
-    await this.move(runId, tabId, "FILLING", { ai, answers });
-    if (plan.length > 0) {
-      this.checkBudget(startedAt);
-      const ex = await this.call(runId, tabId, { kind: "EXECUTE", plan });
-      if (!ex.ok || ex.kind !== "EXECUTED") throw new Error(ex.ok ? "Unexpected reply" : ex.message);
-      executed = ex.results;
-    }
-    await this.move(runId, tabId, "VERIFYING");
-    if (plan.length > 0) {
-      const ver = await this.call(runId, tabId, { kind: "VERIFY", plan });
-      if (!ver.ok || ver.kind !== "VERIFIED") throw new Error(ver.ok ? "Unexpected reply" : ver.message);
-      verified = ver.results;
-    }
-
-    const report: CompletionReport = buildReport(fields, plan, skipped, executed, verified);
-    await this.move(runId, tabId, "READY_FOR_REVIEW", { report });
   }
 }
 

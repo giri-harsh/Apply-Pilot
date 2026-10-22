@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Form inside a cross-origin frame</title></head>
+<body>
+<h1>Framed Co</h1>
+<label for="n">Full name</label><input id="n" name="n" type="text">
+<iframe id="inner" title="application form" width="500" height="300"></iframe>
+<script src="/_common.js"></script>
+<script>
+  // The frame lives on a second local server (another origin), so its form is unreadable from this page.
+  var src = new URLSearchParams(location.search).get("frame");
+  if (src) document.getElementById("inner").src = src;
+</script>
+</body></html>

@@ -15,3 +15,8 @@ Requests to the two API origins are made from the service worker only. They neve
 The test-only build (`pnpm build:e2e`, output `dist-e2e/`) additionally requests `http://127.0.0.1/*` so automated tests can run against local synthetic forms. Never ship `dist-e2e`.
 
 Trade-off: because there is no static content script, Quick Apply must be started from the toolbar popup on the page itself. Cross-origin iframes are not reachable under `activeTab` alone (SPEC 12.9); that limitation is reported rather than hidden.
+
+## Multi-page forms and navigation (Phase 9)
+No new permission was added. After a click that makes the page reload, the service worker listens to `chrome.tabs.onUpdated` for that one tab (the `status` field needs no `tabs` permission) and re-injects the content script when loading completes.
+- `activeTab` stays valid for same-origin navigations of the tab; it ends when the tab moves to another origin. If re-injection is then refused, the run ends BLOCKED with "Permission lost after navigation" and the user clicks the ApplyPilot icon again on the new page.
+- Widening this (host permissions for job sites, or optional host permissions requested at run time) would let a run continue across origins, but it is a privacy trade-off and is left as a user decision.

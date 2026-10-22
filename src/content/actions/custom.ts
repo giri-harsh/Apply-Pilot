@@ -1,3 +1,4 @@
+import { isCancelled } from "../cancel";
 import { normalizeText } from "../observer/dom";
 import { isExpanded, listboxFor, optionElements, optionText } from "../observer/widgets";
 import { fire, setNativeValue, settle } from "./native";
@@ -15,6 +16,7 @@ export async function waitFor(cond: () => boolean, timeoutMs: number, stepMs = 4
   const end = Date.now() + timeoutMs;
   while (Date.now() < end) {
     if (cond()) return true;
+    if (isCancelled()) return false;
     await settle(stepMs);
   }
   return cond();

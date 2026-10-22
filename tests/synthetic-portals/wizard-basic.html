@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Three-step wizard</title></head>
+<body>
+<div id="app"></div>
+<script src="/_common.js"></script>
+<script>
+  window.CFG = {
+    company: "Stepwise Co",
+    saveDraft: true,
+    steps: [
+      { title: "Personal information", next: "Next", fields: [
+        { label: "Full name", required: true }, { label: "Email", type: "email", required: true },
+        { label: "Country", type: "select", options: ["India", "United States"] },
+        { label: "State", type: "select", dependsOn: "Country", optionsBy: { India: ["Maharashtra", "Karnataka"], "United States": ["California", "Texas"] } },
+      ] },
+      { title: "Location and links", next: "Continue", fields: [{ label: "City" }, { label: "LinkedIn" }, { label: "GitHub" }] },
+      { title: "Review your application", review: true, finalText: "Submit application", fields: [] },
+    ],
+  };
+</script>
+<script src="/_steps.js"></script>
+</body></html>

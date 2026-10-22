@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Validation that needs key events</title></head>
+<body>
+<div id="app"></div>
+<script src="/_common.js"></script>
+<script>
+  // Email commits only through key events: the default fill shows "Enter a valid value" until the keyboard fallback runs.
+  window.CFG = {
+    company: "Strict Co",
+    steps: [{ title: "Contact", next: null, finalText: "Submit application", fields: [{ label: "Full name" }, { label: "Email", type: "email", required: true, keyCommit: true }, { label: "City" }] }],
+  };
+</script>
+<script src="/_steps.js"></script>
+</body></html>

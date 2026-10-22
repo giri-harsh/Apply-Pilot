@@ -31,6 +31,8 @@ export type ClassifyOutcome = {
     error: AIErrorKind | null;
     /** Short safe code such as "http_400"; never a response body. */
     errorCode: string | null;
+    /** Provider's own message for a 400/404, for diagnostics (the live suite prints it). Never stored. */
+    errorDetail?: string;
   };
 };
 
@@ -101,6 +103,7 @@ export async function classifyUnresolvedFields(candidates: FormField[], deps: Cl
       } else {
         stats.error = out.error.kind;
         stats.errorCode = out.error.code;
+        stats.errorDetail = out.error.detail;
       }
     }
   }

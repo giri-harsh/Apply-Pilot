@@ -87,6 +87,7 @@ function skip(f: FormField, outcome: FieldResult["outcome"], reason: string): Fi
     required: f.required,
     reason,
     semanticType: f.semanticType,
+    fingerprint: f.fingerprint,
     ...(f.aiMapped ? { aiMapped: true } : {}),
   };
 }
@@ -127,9 +128,9 @@ function planField(f: FormField, profile: UserProfile, opts: PlanOptions): { pla
   const value = readProfileValue(profile, key);
   if (!value) return { skipped: skip(f, "unresolved", "Profile has no value for this field") };
   if (f.currentValue.trim() !== "" && f.control !== "select") {
-    return f.currentValue.trim() === value
-      ? { skipped: skip(f, "already_correct", "Field already holds the profile value") }
-      : { skipped: skip(f, "unresolved", "Field already has a different value; not overwritten") };
+    // A value the page is currently flagging as invalid is not "already correct": it goes back through recovery.
+    if (f.currentValue.trim() !== value) return { skipped: skip(f, "unresolved", "Field already has a different value; not overwritten") };
+    if (!f.invalid) return { skipped: skip(f, "already_correct", "Field already holds the profile value") };
   }
 
   let action: AgentAction;
@@ -149,7 +150,7 @@ function planField(f: FormField, profile: UserProfile, opts: PlanOptions): { pla
   } else if (f.control === "select") {
     const opt = pickOption(f, value);
     if (opt === null) return { skipped: skip(f, "unresolved", "No option exactly matches the profile value") };
-    if (f.currentValue === opt) return { skipped: skip(f, "already_correct", "Option already selected") };
+    if (f.currentValue === opt && !f.invalid) return { skipped: skip(f, "already_correct", "Option already selected") };
     action = { type: "select_option", fieldId: f.fieldId, optionValue: opt };
   } else {
     if (!dateOk(f, value)) return { skipped: skip(f, "unresolved", "Profile date is not in the format this field requires") };
@@ -162,6 +163,7 @@ function planField(f: FormField, profile: UserProfile, opts: PlanOptions): { pla
       semanticType: f.semanticType,
       label: f.label,
       required: f.required,
+      fingerprint: f.fingerprint,
       ...(f.aiMapped ? { aiMapped: true } : {}),
       confidence: { identification: f.confidence, mapping: opts.mappingConfidence ?? f.confidence },
     },

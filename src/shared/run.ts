@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { RUN_STATES } from "./state-machine";
-import { CompletionReportSchema } from "./form";
+import { CompletionReportSchema, FieldResultSchema, StepSummarySchema } from "./form";
 import { JobSummarySchema } from "../job/schema";
 
 export const RunRecordSchema = z.object({
@@ -15,6 +15,19 @@ export const RunRecordSchema = z.object({
   fieldsDiscovered: z.number().int().nonnegative().nullable(),
   resumeCount: z.number().int().nonnegative(),
   report: CompletionReportSchema.nullable(),
+  /** Per-step checkpoints (SPEC 15.3): finished steps with their real counts. Resume re-observes; it never replays these. */
+  steps: z.array(StepSummarySchema.extend({ results: z.array(FieldResultSchema).max(80) })).max(20).default([]),
+  /** Counters enforced against the run limits (SPEC 21.2). They survive a service worker restart. */
+  counters: z
+    .object({
+      actions: z.number().int().nonnegative(),
+      retries: z.number().int().nonnegative(),
+      passes: z.number().int().nonnegative(),
+      transitions: z.number().int().nonnegative(),
+    })
+    .default({ actions: 0, retries: 0, passes: 0, transitions: 0 }),
+  /** Honest notes shown in the report: blockers, unreadable frames, limits, unresolved required fields. */
+  notes: z.array(z.string().max(300)).max(20).default([]),
   /** Answers written for this run, kept so the user can save one as a reusable answer after reviewing it. */
   answers: z
     .array(

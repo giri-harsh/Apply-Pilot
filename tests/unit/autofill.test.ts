@@ -415,7 +415,8 @@ describe("completion report", () => {
       [{ fieldId: "a", executed: true, error: null }, { fieldId: "b", executed: true, error: null }, { fieldId: "c", executed: false, error: "Target is disabled or read-only" }],
       [{ fieldId: "a", verified: true, reason: "ok" }, { fieldId: "b", verified: false, reason: "mismatch" }],
     );
-    expect(r).toMatchObject({ totalFields: 3, filled: 2, verified: 1, failed: 2, skippedSensitive: 1, requiredUnresolved: 2 });
+    // totalFields is the number of visible fields that received a result (the old input list is no longer consulted).
+    expect(r).toMatchObject({ totalFields: 4, filled: 2, verified: 1, failed: 2, skippedSensitive: 1, requiredUnresolved: 2 });
     expect(r.results.find((x) => x.fieldId === "c")!.reason).toBe("Target is disabled or read-only");
   });
 });

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>DOM changes on every step</title></head>
+<body>
+<div id="app"></div>
+<script src="/_common.js"></script>
+<script>
+  window.CFG = {
+    company: "Churn Co",
+    rotate: true,
+    mutate: true,
+    indicator: 3,
+    steps: [
+      { title: "Who are you", next: "Next", fields: [{ label: "Full name" }, { label: "Email", type: "email" }] },
+      { title: "Where", next: "Next", fields: [{ label: "City" }, { label: "Postal code" }] },
+      { title: "Links", next: null, finalText: "Submit application", fields: [{ label: "GitHub" }] },
+    ],
+  };
+</script>
+<script src="/_steps.js"></script>
+</body></html>
