@@ -29,3 +29,4 @@ TypeScript, React 19, Vite 8 (multi-build), Zod 3, Vitest 5 + jsdom, Playwright 
 - Phase 8: portal adapters driven by real testing.
 - Phase 10: optional local companion (only if needed).
 - Phase 11: hardening, privacy/permission review, docs.
+- Phase 10 (local companion): SKIPPED. Phase 7 (resume import, layout, PDF validation, upload) runs entirely in the extension with a deterministic layout engine and an offscreen document, so no Phase 7 requirement needs a companion. Revisit only if a measured need appears (for example persistent SQLite history or rendering fidelity beyond the built-in engine).

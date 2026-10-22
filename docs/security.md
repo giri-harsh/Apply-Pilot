@@ -38,3 +38,24 @@ Tests: `navigation.test.ts` (classifier cases), `run-manager.test.ts`, and `phas
 - **Uploads.** Bytes cross to the page's content script as ordered base64 chunks over the extension message channel (no URL, no page-visible state), reassembled in module memory, zeroed after commit or abort, and dropped after 60 s idle. The resume goes only into a field classified as a resume field; ambiguous, other and cover-letter fields are skipped and reported; a field that already holds a file is never replaced; one upload per field per run. The result is verified from the page's own reaction, never assumed.
 - **Filenames** contain only the company and role (ASCII) and the date, never the applicant's name, email or phone.
 - **Imports** parse in extension pages only, with the pdf.js worker served from the extension itself (no CDN), size-capped, and never auto-confirmed.
+
+## Storage map (what is kept where, and what never is)
+| Store | Location | Holds | Never holds |
+|---|---|---|---|
+| `applypilot.profile.*` | chrome.storage.local | your profile | keys |
+| `applypilot.runs.*` | same | run state, per-field outcomes and reasons | typed values, answers' prompts |
+| `applypilot.ai.keys.*` | same (service worker only; access level TRUSTED_CONTEXTS) | API keys | anything else |
+| `applypilot.ai.settings/usage/cache/answercache/jobenrich.*` | same | settings, usage counts, field-signature mappings, cached grounded answers, job-enrichment cache | prompts, raw responses, profile values |
+| `applypilot.diagnostics.settings.*` | same | the "capture each step" switch | captures |
+| `applypilot.answers.*` | same | answers you chose to save | unsaved answers |
+| `applypilot.jobs.*` | same | public posting text, 6 h cache | profile data |
+| `applypilot.resume.*` (master, variants, documents, settings) | same | your master resume, generated-resume records and reports | binaries, keys |
+| `applypilot-resume` | IndexedDB | your imported/generated resume files | metadata duplicates |
+| `applypilot-diagnostics` | IndexedDB | redacted page captures (max 100) | values, profile strings, file names |
+`privacy.spec.ts` scans every non-personal store, the exports, console output and AI request bodies for profile strings and API keys after real runs with AI, tailoring and capture.
+
+## API key review (Phase 11)
+Keys are typed on the options page, sent once to the service worker (`AI_SET_KEY.secret`, the only secret-carrying field in any message schema, asserted by `hardening.test.ts`), stored under one key, shown only as the last four characters, sent only in a request header to the two allowed origins, and absent from exports, captures, run records, usage records and logs (asserted by `privacy.spec.ts`). Unencrypted `chrome.storage.local` is the remaining limit: anyone with your unlocked Chrome profile can read it.
+
+## Portal capture
+A capture is built from an allowlist (never a field's current value or a file name), masked and truncated, then scrubbed of every string in your profile before storage; the unit test pre-fills a page with the fixture profile and scans the result for every profile string. Known effect: a label or select option that equals a profile string (for example the country) is replaced by `<profile>`.

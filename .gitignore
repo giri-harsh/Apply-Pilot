@@ -8,3 +8,4 @@ playwright-report
 !.env.example
 .claude/settings.local.json
 *.log
+release
