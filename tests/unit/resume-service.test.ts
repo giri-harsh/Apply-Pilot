@@ -54,6 +54,7 @@ async function setup(o: Setup = {}) {
     selectVariant,
     defaultVariants,
     makeShorten,
+    coverLetter: async () => null,
     chooseFile: chooseFileForField,
     sendToTab,
     build,

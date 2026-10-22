@@ -26,6 +26,8 @@ export type ProviderMock = {
   /** Called with each classification request's parsed fields. */
   onFields?: (fields: PromptField[]) => void;
   /** Rewritten bullets for a resume rewrite / regeneration request: items {lineId, text, evidenceFactIds, claims}. Default: none. */
+  /** Cover-letter paragraphs: items {text, evidenceIds, claims}. Default: none. */
+  cover?: (payload: CoverPayload) => unknown[];
   resume?: (payload: ResumePayload, kind: "rewrite" | "regeneration") => unknown[];
   /** Answer items for an answer-generation / regeneration / shortening request. Default: none. */
   answers?: (payload: AnswerPayload, kind: "generation" | "regeneration" | "shortening", user: string) => unknown[];
@@ -42,6 +44,8 @@ export type ResumePayload = {
   entries: { id: string; heading: string; technologies: string[] }[];
   bullets: { lineId: string; entry: string; text: string; maxChars: number }[];
 };
+export type CoverPayload = { job: { title: string | null; company: string | null }; evidence: { id: string; kind: string; text: string }[] };
+export type CoverRequest = { provider: "gemini" | "groq"; payload: CoverPayload; user: string };
 export type ResumeRequest = { provider: "gemini" | "groq"; kind: "rewrite" | "regeneration"; payload: ResumePayload; user: string };
 
 export type AnswerRequest = { provider: "gemini" | "groq"; kind: "generation" | "regeneration" | "shortening"; payload: AnswerPayload; user: string };
@@ -53,6 +57,7 @@ export function answerItem(questionId: string, answer: string, evidenceIds: stri
 export type MockAi = {
   answerRequests: AnswerRequest[];
   resumeRequests: ResumeRequest[];
+  coverRequests: CoverRequest[];
   calls: { gemini: number; groq: number };
   /** Raw request bodies, to assert on what leaves the browser. */
   bodies: { gemini: string[]; groq: string[] };
@@ -72,6 +77,7 @@ export async function installMockAi(context: BrowserContext): Promise<MockAi> {
   const state: MockAi = {
     answerRequests: [],
     resumeRequests: [],
+    coverRequests: [],
     calls: { gemini: 0, groq: 0 },
     bodies: { gemini: [], groq: [] },
     connection: { gemini: true, groq: true },
@@ -107,6 +113,10 @@ export async function installMockAi(context: BrowserContext): Promise<MockAi> {
           : "generation";
       state.answerRequests.push({ provider, kind, payload: parsed, user });
       payload = { answers: mock.answers ? mock.answers(parsed, kind, user) : [] };
+    } else if (user.startsWith("Write the cover letter body.")) {
+      const parsed = JSON.parse(MARK.exec(user)![1]!) as CoverPayload;
+      state.coverRequests.push({ provider, payload: parsed, user });
+      payload = { paragraphs: mock.cover ? mock.cover(parsed) : [] };
     } else if (user.startsWith("Reword each bullet.")) {
       const parsed = JSON.parse(MARK.exec(user)![1]!) as ResumePayload;
       const kind: "rewrite" | "regeneration" = user.includes("rejected for these specific problems") ? "regeneration" : "rewrite";

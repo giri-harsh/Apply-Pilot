@@ -51,7 +51,8 @@ export class StepAccumulator {
     const key = r.fingerprint ?? r.fieldId;
     const old = this.results.get(key);
     // A later "still unresolved" must not replace an earlier, more specific reason (for example a rejected AI answer).
-    if (!old || RANK[r.outcome] > RANK[old.outcome]) this.results.set(key, r);
+    // The mapper's placeholder for file inputs ("handled by the resume upload step") yields to the upload step's real reason.
+    if (!old || RANK[r.outcome] > RANK[old.outcome] || (old.reason.startsWith("File field: handled by") && !r.reason.startsWith("File field: handled by"))) this.results.set(key, r);
     else if (RANK[r.outcome] === RANK[old.outcome] && RANK[r.outcome] >= 4) {
       // A field that was typed into in an earlier pass stays "filled" even when the last attempt was only a give-up note.
       this.results.set(key, { ...r, executed: Boolean(old.executed || r.executed) });

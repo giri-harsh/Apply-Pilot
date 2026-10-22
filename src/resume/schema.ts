@@ -242,6 +242,8 @@ export const ResumeTailoringReportSchema = z.object({
   warnings: z.array(text(300)).max(40),
   output: FileRefSchema.nullable(),
   docxOutput: FileRefSchema.nullable(),
+  /** A generated cover letter PDF for this application (Phase 7b), when a required cover-letter field asked for one. */
+  coverLetter: FileRefSchema.nullable().default(null),
   ai: z.object({ requests: z.number().int().nonnegative(), provider: z.string().nullable() }),
 });
 export type ResumeTailoringReport = z.infer<typeof ResumeTailoringReportSchema>;

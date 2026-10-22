@@ -13,7 +13,33 @@ export const DEFAULT_IMPORT_MAX_BYTES = 10 * 1024 * 1024;
 export const NO_TEXT_PDF_WARNING = "No extractable text in this PDF. OCR is not supported yet.";
 const MIN_PDF_CHARS = 20;
 
-export type ParseOptions = { maxBytes?: number; now?: Date } & ExtractDeps;
+export type ParseOptions = { maxBytes?: number; /** DOCX only: cap on the expanded size (default 5x maxBytes). */ maxUncompressedBytes?: number; now?: Date } & ExtractDeps;
+export const DOCX_EXPANSION_FACTOR = 5;
+
+/**
+ * Total declared uncompressed size of a zip, from its central directory (no decompression). Null when the bytes are not a
+ * readable zip. The declared sizes are what a decompressor would produce, which is exactly what must be bounded.
+ */
+export function zipUncompressedSize(b: Uint8Array): number | null {
+  const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  let eocd = -1;
+  for (let i = b.length - 22; i >= Math.max(0, b.length - 22 - 65_535); i--) {
+    if (v.getUint32(i, true) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) return null;
+  const count = v.getUint16(eocd + 10, true);
+  let p = v.getUint32(eocd + 16, true);
+  let total = 0;
+  for (let n = 0; n < count; n++) {
+    if (p + 46 > b.length || v.getUint32(p, true) !== 0x02014b50) return null;
+    total += v.getUint32(p + 24, true);
+    p += 46 + v.getUint16(p + 28, true) + v.getUint16(p + 30, true) + v.getUint16(p + 32, true);
+  }
+  return total;
+}
 
 type Format = ParsedResume["format"];
 
@@ -39,6 +65,18 @@ export async function parseResumeFile(file: { name: string; bytes: Uint8Array },
   if (file.bytes.byteLength > maxBytes) {
     const mb = (n: number) => `${Math.round((n / (1024 * 1024)) * 10) / 10} MB`;
     return empty(filename, format, [`This file is ${mb(file.bytes.byteLength)}, over the ${mb(maxBytes)} import limit. Nothing was read.`]);
+  }
+
+  // A DOCX is a zip: the declared uncompressed size is read from the zip directory BEFORE anything is expanded, so a
+  // small file that inflates to gigabytes (a zip bomb) is refused. The cap follows the same configurable limit as the file size.
+  if (format === "docx") {
+    const cap = options.maxUncompressedBytes ?? maxBytes * DOCX_EXPANSION_FACTOR;
+    const declared = zipUncompressedSize(file.bytes);
+    if (declared === null) return empty(filename, format, ["This DOCX could not be read as a zip archive. Nothing was read."]);
+    if (declared > cap) {
+      const mb = (n: number) => `${Math.round((n / (1024 * 1024)) * 10) / 10} MB`;
+      return empty(filename, format, [`This DOCX expands to ${mb(declared)}, over the ${mb(cap)} limit. Nothing was read.`]);
+    }
   }
 
   const warnings: string[] = [];

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Machine Learning Intern at Northwind Analytics</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"JobPosting","title":"Machine Learning Intern","hiringOrganization":{"@type":"Organization","name":"Northwind Analytics"},
+ "employmentType":"INTERN",
+ "description":"Northwind Analytics builds forecasting tools for retailers. Requirements: Python and SQL. You will train and evaluate forecasting models and write data pipelines. Preferred: Docker and PyTorch."}
+</script>
+</head>
+<body>
+<main>
+  <h1>Machine Learning Intern</h1>
+  <div class="company-name">Northwind Analytics</div>
+  <h2>About the role</h2>
+  <p>Northwind Analytics builds forecasting tools for retailers. Requirements: Python and SQL. You will train and evaluate forecasting models and write data pipelines. Preferred: Docker and PyTorch.</p>
+  <h2>Apply</h2>
+  <form id="app">
+    <label for="n">Full name</label>
+    <input id="n" name="n" type="text">
+    <label for="e">Email</label>
+    <input id="e" name="e" type="email">
+    <label for="cv">Resume *</label>
+    <input id="cv" name="cv" type="file" accept=".pdf" required>
+    <div id="cv-status" role="status"></div>
+    <label for="cl">Cover letter *</label>
+    <input id="cl" name="cl" type="file" accept=".pdf" required>
+    <div id="cl-status" role="status"></div>
+    <button id="submit" type="submit">Submit application</button>
+  </form>
+</main>
+<script src="/_common.js"></script>
+<script>
+  window.__uploads = [];
+  ["cv", "cl"].forEach(function (id) {
+    var input = document.getElementById(id);
+    input.addEventListener("change", function () {
+      var f = input.files && input.files[0];
+      document.getElementById(id + "-status").textContent = f ? "Uploaded: " + f.name + " (" + f.size + " bytes)" : "";
+      window.__uploads.push({ field: id, name: f ? f.name : null, size: f ? f.size : 0 });
+    });
+  });
+</script>
+</body>
+</html>

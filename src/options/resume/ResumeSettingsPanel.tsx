@@ -89,9 +89,9 @@ export function ResumeSettingsPanel() {
       </div>
       <div className="field">
         <label>
-          <input type="checkbox" data-testid="cover-letter-toggle" checked={false} disabled /> Write a cover letter when a portal requires one
+          <input type="checkbox" data-testid="cover-letter-toggle" checked={settings.coverLetterEnabled} onChange={(e) => void save({ coverLetterEnabled: e.target.checked })} /> Write a cover letter when a portal requires one
         </label>
-        <span className="muted"> Not available yet: cover-letter fields are reported and left for you.</span>
+        <span className="muted"> Off by default. Needs AI. Optional cover-letter fields are always left for you.</span>
       </div>
       <div className="field">
         <button data-testid="export-resume-data" onClick={() => void exportData()}>Export master, variants and history (JSON)</button>

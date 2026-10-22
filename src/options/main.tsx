@@ -16,6 +16,7 @@ import { AiPanel } from "./AiPanel";
 import { SiteAccessPanel } from "./SiteAccessPanel";
 import { ResumeImportPanel } from "./resume/ResumeImportPanel";
 import { ResumeSettingsPanel } from "./resume/ResumeSettingsPanel";
+import { MasterEditorPanel } from "./resume/MasterEditorPanel";
 import "./options.css";
 
 type Path = (string | number)[];
@@ -365,6 +366,7 @@ function App() {
         <>
           <ResumeImportPanel />
           <ResumeSettingsPanel />
+          <MasterEditorPanel />
         </>
       )}
 

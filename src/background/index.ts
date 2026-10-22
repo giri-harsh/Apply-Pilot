@@ -19,7 +19,7 @@ import { ResumeService } from "./resume-service";
 import { chooseFileForField } from "@/content/upload/choose";
 import { OffscreenResponseSchema, ShortenRequestSchema } from "@/resume/offscreen-protocol";
 import { createResumeStore } from "@/resume/storage";
-import { makeShorten, tailor } from "@/resume/tailor";
+import { generateCoverLetter, makeShorten, tailor } from "@/resume/tailor";
 import { defaultVariants, selectVariant } from "@/resume/variants";
 import type { Scheduler } from "./scheduler";
 
@@ -97,6 +97,7 @@ const resume = new ResumeService({
   selectVariant,
   defaultVariants,
   makeShorten,
+  coverLetter: generateCoverLetter,
   chooseFile: chooseFileForField,
   sendToTab,
   async build(req) {

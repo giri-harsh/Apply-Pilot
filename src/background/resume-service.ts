@@ -1,6 +1,6 @@
 import { rankAgainstProfile } from "@/job/rank";
 import type { JobContext, MatchReport } from "@/job/schema";
-import type { ChooseFileForFieldFn, MakeShortenFn, SelectVariantFn, ShortenFn, TailorAi, TailorFn } from "@/resume/contracts";
+import type { ChooseFileForFieldFn, CoverLetterFn, MakeShortenFn, SelectVariantFn, ShortenFn, TailorAi, TailorFn } from "@/resume/contracts";
 import { assertMasterUnchanged, hashMaster } from "@/resume/hash";
 import { resumeFilename } from "@/resume/filename";
 import type { OffscreenRequest, OffscreenResponse } from "@/resume/offscreen-protocol";
@@ -40,6 +40,7 @@ export type ResumeServiceDeps = {
   selectVariant: SelectVariantFn;
   defaultVariants(master: MasterResume): ResumeVariant[];
   makeShorten: MakeShortenFn;
+  coverLetter: CoverLetterFn;
   build(req: OffscreenRequest): Promise<OffscreenResponse>;
   chooseFile: ChooseFileForFieldFn;
   sendToTab(tabId: number, req: ContentRequest): Promise<ContentResponse>;
@@ -68,6 +69,7 @@ const none = (status: Prepared["status"], warning: string): Prepared => ({ statu
 export class ResumeService {
   private sessions = new Map<string, ShortenFn>();
   private prepared = new Map<string, Promise<Prepared>>();
+  private coverCache = new Map<string, Promise<{ file: FileRef | null; reason: string }>>();
 
   constructor(private deps: ResumeServiceDeps) {}
 
@@ -212,6 +214,7 @@ export class ResumeService {
           warnings,
           output: built.pdf,
           docxOutput: built.docx,
+          coverLetter: null,
           variantAutoSelected: auto,
         },
         validationStatus: status,
@@ -232,6 +235,69 @@ export class ResumeService {
     } finally {
       this.sessions.delete(sessionId);
     }
+  }
+
+  /**
+   * A cover letter for a required cover-letter field (default OFF). Written from the same facts and held to the same
+   * grounding rules as the resume; never invented without AI. Made once per run and attached to the run's resume document so
+   * that deleting the document deletes the letter too.
+   */
+  private coverLetterFor(input: UploadPhaseInput, prepared: Prepared): Promise<{ file: FileRef | null; reason: string }> {
+    const key = `${input.runId}:cover`;
+    let p = this.coverCache.get(key);
+    if (!p) {
+      p = this.makeCoverLetter(input, prepared).catch((e) => ({ file: null, reason: `The cover letter could not be made (${e instanceof Error ? e.message.slice(0, 120) : "error"}); left for you` }));
+      this.coverCache.set(key, p);
+    }
+    return p;
+  }
+
+  private async makeCoverLetter(input: UploadPhaseInput, prepared: Prepared): Promise<{ file: FileRef | null; reason: string }> {
+    const d = this.deps;
+    const master = await d.store.getMaster();
+    const job = await d.loadJob(input.url);
+    const doc = prepared.documentId ? await d.store.getDocument(prepared.documentId) : null;
+    if (!master || !job || !doc) return { file: null, reason: "A cover letter needs your master resume, the job description and a resume document; left for you" };
+    if (doc.report.coverLetter && (await d.store.getBinary(doc.report.coverLetter.fileId))) return { file: doc.report.coverLetter, reason: "" };
+    const ai = await d.getAi();
+    if (!ai) return { file: null, reason: "A cover letter needs AI, which is off or not configured; left for you" };
+    const letter = await d.coverLetter({ master, job, ai, budget: { remaining: d.aiRequests ?? 3 } });
+    if (!letter) return { file: null, reason: "No grounded cover letter could be written; left for you" };
+
+    // The letter body is one section; the header (name and contact, from the master's own facts) is added here.
+    const c = master.contact;
+    const contactParts = [c.email, c.phone, c.location].filter((f): f is NonNullable<typeof f> => !!f);
+    const header = {
+      key: "header" as const,
+      title: "",
+      entries: [
+        {
+          entryId: "cl_header",
+          lines: [
+            { lineId: "cl_name", role: "name" as const, text: c.name.text, sourceFactIds: [c.name.factId], origin: "master" as const, relevance: 1, protected: true, onlyEvidenceForRequiredQualification: false },
+            ...(contactParts.length > 0
+              ? [{ lineId: "cl_contact", role: "contact" as const, text: contactParts.map((f) => f.text).join(" | "), sourceFactIds: contactParts.map((f) => f.factId), origin: "master" as const, relevance: 1, protected: true, onlyEvidenceForRequiredQualification: false }]
+              : []),
+          ],
+        },
+      ],
+    };
+    const sessionId = d.newId();
+    const taken = new Set((await d.store.listBinaries()).map((f) => f.filename));
+    const filename = resumeFilename({ company: job.company ?? "", role: job.jobTitle ?? "", kind: "CoverLetter", date: d.now(), taken });
+    const settings = await d.store.getSettings();
+    const config = LayoutConfigSchema.parse({ ...DEFAULT_LAYOUT, ...settings.layout, pageLimit: 1 });
+    const built = await d.build({
+      target: "offscreen", kind: "BUILD", sessionId, tailored: { ...letter, sections: [header, ...letter.sections] }, config, documentKind: "CoverLetter", filename, docxFilename: null,
+      contact: { name: c.name.text, email: c.email?.text, phone: c.phone?.text },
+    });
+    if (!built.ok) return { file: null, reason: `The cover letter could not be built (${built.message}); left for you` };
+    if (!built.validation.ok || !built.layout.satisfiedLimit) {
+      await d.store.deleteBinary(built.pdf.fileId).catch(() => undefined);
+      return { file: null, reason: "The generated cover letter did not validate as one clean page; left for you" };
+    }
+    await d.store.putDocument({ ...doc, report: { ...doc.report, coverLetter: built.pdf } });
+    return { file: built.pdf, reason: "" };
   }
 
   /** The RunManager hook: put the right file into each file field, verify, and report honestly. */
@@ -272,19 +338,35 @@ export class ResumeService {
         results.push(row(f, info.classification === "ambiguous" ? "ambiguous" : "unresolved", `Not a resume field (${info.reason}); left for you`));
         continue;
       }
-      if (info.classification === "cover_letter") {
-        results.push(row(f, "unresolved", "Cover letter field; cover letters are optional and left for you"));
-        continue;
+      const isLetter = info.classification === "cover_letter";
+      if (isLetter) {
+        // Optional by default: only a REQUIRED cover-letter field, with the setting on, gets a generated letter.
+        const settings = await d.store.getSettings();
+        if (!settings.coverLetterEnabled || !f.required) {
+          results.push(row(f, "unresolved", !settings.coverLetterEnabled ? "Cover letter field; cover letters are off, left for you" : "Optional cover letter field; left for you"));
+          continue;
+        }
       }
 
       prepared ??= await this.prepare(input.runId, input.url, input.variantId, input.resume);
       resume = { ...resume, status: prepared.status, variantId: prepared.variantId, variantAuto: prepared.variantAuto, documentId: prepared.documentId, filename: prepared.pdf?.filename ?? null, pageCount: prepared.pageCount, warnings: prepared.warnings.slice(0, 10) };
       await input.save(resume); // the document id is on the run record before any byte is sent, so a restart reuses it
-      if (!prepared.pdf) {
+      let letter: FileRef | null = null;
+      if (isLetter) {
+        const made = await this.coverLetterFor(input, prepared);
+        if (!made.file) {
+          results.push(row(f, "unresolved", made.reason));
+          continue;
+        }
+        letter = made.file;
+      } else if (!prepared.pdf) {
         results.push(row(f, "unresolved", prepared.warnings[0] ?? "No resume file is available"));
         continue;
       }
-      const choice = d.chooseFile({ classification: info.classification, accept: info.accept, hasFile: info.hasFile }, { resume: [prepared.pdf, ...(prepared.docx ? [prepared.docx] : [])], coverLetter: [] });
+      const choice = d.chooseFile(
+        { classification: info.classification, accept: info.accept, hasFile: info.hasFile },
+        { resume: isLetter ? [] : [prepared.pdf!, ...(prepared.docx ? [prepared.docx] : [])], coverLetter: letter ? [letter] : [] },
+      );
       if (!choice.file) {
         results.push(row(f, "unresolved", choice.reason));
         continue;

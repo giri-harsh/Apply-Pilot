@@ -7,6 +7,8 @@ export const PROVENANCE_SOURCES = [
   "approved_prior_answer",
   "verified_application",
   "derived_approved",
+  /** A fact of the master resume the user edited by hand in Settings (Phase 7b). */
+  "user_edited",
 ] as const;
 
 export const ProvenanceSchema = z.object({

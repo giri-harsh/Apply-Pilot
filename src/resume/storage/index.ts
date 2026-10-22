@@ -187,7 +187,7 @@ export function createResumeStore(deps: ResumeStoreDeps = {}): ResumeStore {
         const list = await readDocuments();
         const doc = list.find((d) => d.documentId === documentId);
         if (doc) {
-          for (const ref of [doc.report.output, doc.report.docxOutput]) if (ref) await deleteFile(ref.fileId);
+          for (const ref of [doc.report.output, doc.report.docxOutput, doc.report.coverLetter]) if (ref) await deleteFile(ref.fileId);
         }
         await kv.set({ [RESUME_DOCUMENTS_KEY]: list.filter((d) => d.documentId !== documentId) });
       }),

@@ -97,6 +97,7 @@ function doc(id: string, output: FileRef | null, docxOutput: FileRef | null): Re
       warnings: [],
       output,
       docxOutput,
+      coverLetter: null,
       ai: { requests: 0, provider: null },
     },
     validationStatus: "validated",

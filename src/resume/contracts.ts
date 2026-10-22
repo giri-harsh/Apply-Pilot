@@ -115,7 +115,7 @@ export type TailorInput = {
 
 export type TailorOutput = {
   tailored: TailoredResume;
-  report: Omit<ResumeTailoringReport, "validation" | "output" | "docxOutput" | "layout">;
+  report: Omit<ResumeTailoringReport, "validation" | "output" | "docxOutput" | "coverLetter" | "layout">;
 };
 
 export type TailorFn = (input: TailorInput) => Promise<TailorOutput>;
