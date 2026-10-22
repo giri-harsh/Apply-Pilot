@@ -17,6 +17,7 @@ import { JobService } from "./job-service";
 import { RunManager } from "./run-manager";
 import { ResumeService } from "./resume-service";
 import { DiagnosticsService } from "./diagnostics-service";
+import { LearningService } from "@/learning/service";
 import { createCaptureStore } from "@/diagnostics/store";
 import { DIAG_SETTINGS_KEY, DiagSettingsSchema } from "@/diagnostics/schema";
 import { chooseFileForField } from "@/content/upload/choose";
@@ -126,7 +127,10 @@ const diagnostics = new DiagnosticsService({
   newId: () => crypto.randomUUID(),
 });
 
+const learning = new LearningService({ store: chromeStore(), now: () => Date.now(), newId: () => crypto.randomUUID() });
+
 const manager = new RunManager({
+  learning,
   captureStep: async (tabId, stepIndex) => {
     const raw = (await chrome.storage.local.get(DIAG_SETTINGS_KEY))[DIAG_SETTINGS_KEY];
     if (DiagSettingsSchema.parse(raw ?? {}).captureEachStep) await diagnostics.capture(tabId, stepIndex, { inject: false });

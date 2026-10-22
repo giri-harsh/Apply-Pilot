@@ -15,6 +15,7 @@ import { deleteProfile, loadProfile, saveProfile } from "@/shared/storage";
 import { AiPanel } from "./AiPanel";
 import { SiteAccessPanel } from "./SiteAccessPanel";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
+import { LearnedPanel } from "./LearnedPanel";
 import { ResumeImportPanel } from "./resume/ResumeImportPanel";
 import { ResumeSettingsPanel } from "./resume/ResumeSettingsPanel";
 import { MasterEditorPanel } from "./resume/MasterEditorPanel";
@@ -364,7 +365,12 @@ function App() {
 
       {tab === "Site access" && <SiteAccessPanel />}
 
-      {tab === "Diagnostics" && <DiagnosticsPanel />}
+      {tab === "Diagnostics" && (
+        <>
+          <DiagnosticsPanel />
+          <LearnedPanel />
+        </>
+      )}
       {tab === "Resume" && (
         <>
           <ResumeImportPanel />

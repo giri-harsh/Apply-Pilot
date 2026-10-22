@@ -46,7 +46,8 @@ Tests: `navigation.test.ts` (classifier cases), `run-manager.test.ts`, and `phas
 | `applypilot.runs.*` | same | run state, per-field outcomes and reasons | typed values, answers' prompts |
 | `applypilot.ai.keys.*` | same (service worker only; access level TRUSTED_CONTEXTS) | API keys | anything else |
 | `applypilot.ai.settings/usage/cache/answercache/jobenrich.*` | same | settings, usage counts, field-signature mappings, cached grounded answers, job-enrichment cache | prompts, raw responses, profile values |
-| `applypilot.diagnostics.settings.*` | same | the "capture each step" switch | captures |
+| `applypilot.diagnostics.settings.*`, `applypilot.learning.settings.*` | same | the "capture each step" and "learning" switches | captures |
+| `applypilot.learned.v1` | same | verified strategies: host, hashed structure, pattern hash, types and profile KEYS, confidence | values, label text, personal strings |
 | `applypilot.answers.*` | same | answers you chose to save | unsaved answers |
 | `applypilot.jobs.*` | same | public posting text, 6 h cache | profile data |
 | `applypilot.resume.*` (master, variants, documents, settings) | same | your master resume, generated-resume records and reports | binaries, keys |

@@ -10,6 +10,8 @@ import { Abort, LimitReached } from "./abort";
 import { DEFAULT_LIMITS, type RunLimits } from "./limits";
 import { Scheduler } from "./scheduler";
 import { originPattern } from "@/shared/origin";
+import { emptyHints, type LearningPort } from "@/learning/service";
+import { fingerprintHash, type LearnEvent } from "@/learning/strategies";
 
 export { DEFAULT_LIMITS };
 export type { RunLimits };
@@ -54,6 +56,8 @@ export type UploadPhaseInput = {
 export type UploadPhaseResult = { results: FieldResult[]; resume: RunRecord["resume"]; notes: string[] };
 
 export interface RunDeps {
+  /** Learned strategies (Phase 8b): verified successes reused only on a matching page structure. Absent = no learning. */
+  learning?: LearningPort;
   /** Diagnostics: capture the current step when the user turned "capture each step" on. Absent or failing never affects the run. */
   captureStep?(tabId: number, stepIndex: number): Promise<void>;
   /** Resume tailoring and upload (Phase 7). Absent means file fields are only reported. */
@@ -390,6 +394,9 @@ export class RunManager {
         const askedClassify = new Set<string>();
         const askedAnswers = new Set<string>();
         const classifyMemo = new Map<string, AcceptedMapping>();
+        const aiMapped = new Map<string, { semanticType: string; profileKey: string }>();
+        const learnedMapUsed = new Map<string, string>();
+        const learnedInputUsed = new Map<string, string>();
         let stepUrl = cur().url;
         let stepTitle = cur().pageTitle;
         let stepFields = 0;
@@ -504,6 +511,20 @@ export class RunManager {
           const limit = this.deps.aiRequestLimit ?? 6;
           const fpOf = new Map(fields.map((f) => [f.fieldId, f.fingerprint]));
           const idOf = new Map(fields.map((f) => [f.fingerprint, f.fieldId]));
+
+          // Learned strategies (SPEC 10.4): verified successes from earlier runs on this portal, used only when the page structure
+          // matches. They are hypotheses: everything they produce goes through the normal mapper, executor and verifier.
+          const hints = this.deps.learning ? await this.deps.learning.forPage({ url: obs.url, fields }).catch(() => emptyHints()) : emptyHints();
+          const learnedMaps: AcceptedMapping[] = [];
+          for (const s of skipped) {
+            const fp = fpOf.get(s.fieldId);
+            const lm = fp ? hints.mappings.get(fp) : undefined;
+            if (fp && lm && s.outcome === "unresolved") {
+              learnedMaps.push({ fieldId: s.fieldId, semanticType: lm.semanticType, profileKey: lm.profileKey, confidence: 0.9 } as AcceptedMapping);
+              learnedMapUsed.set(fp, lm.id);
+              askedClassify.add(fp); // already understood: the AI is not asked about it
+            }
+          }
           // Each field is put to the AI at most once per step: later passes re-use the answer, they never re-ask.
           const unasked = (list: FieldResult[], seen: Set<string>) => list.filter((s) => !seen.has(fpOf.get(s.fieldId) ?? ""));
           const markAsked = (list: FieldResult[], seen: Set<string>) => list.forEach((s) => seen.add(fpOf.get(s.fieldId) ?? ""));
@@ -515,7 +536,10 @@ export class RunManager {
               const r = await this.deps.classifyAi({ fields, skipped: fresh, requestsRemaining: Math.max(0, limit - ai.requests) });
               for (const m of r.accepted) {
                 const fp = fpOf.get(m.fieldId);
-                if (fp) classifyMemo.set(fp, m);
+                if (fp) {
+                  classifyMemo.set(fp, m);
+                  aiMapped.set(fp, { semanticType: m.semanticType, profileKey: m.profileKey });
+                }
               }
               // Accepted mappings from earlier passes still apply to fields that remain unresolved (recovery of AI-mapped fields).
               const remembered: AcceptedMapping[] = [];
@@ -537,6 +561,7 @@ export class RunManager {
             }
           }
 
+          aiAccepted = [...learnedMaps, ...aiAccepted.filter((m) => !learnedMaps.some((l) => l.fieldId === m.fieldId))];
           await this.move(runId, tabId, "PLANNING", { ai });
           if (aiAccepted.length > 0) {
             const mappedAi = await this.expect(
@@ -588,7 +613,10 @@ export class RunManager {
               acc.addPass([], [{ fieldId: p.fieldId, label: p.label, outcome: "failed", required: p.required, reason: `Recovery exhausted: ${lastReason.get(failureKey(p)) ?? "the field could not be filled"}`.slice(0, 280), semanticType: p.semanticType, fingerprint: p.fingerprint, executed: false }], [], []);
               continue;
             }
-            runnable.push(n >= L.maxRecoveryAttempts ? { ...p, strategy: "keyboard" } : p);
+            // A learned input strategy is the FIRST attempt for a field that needed it before (fewer retries next time).
+            const li = p.fingerprint ? hints.inputStrategies.get(p.fingerprint) : undefined;
+            if (n === 0 && li && !p.strategy) learnedInputUsed.set(p.fingerprint!, li.id);
+            runnable.push(n >= L.maxRecoveryAttempts || (n === 0 && li) ? { ...p, strategy: "keyboard" } : p);
           }
           const retrying = runnable.filter((p) => (attempts.get(failureKey(p)) ?? 0) > 0).length;
           if (counters.retries + retrying > L.maxRetries) throw new LimitReached("retries", `${L.maxRetries} retried actions`);
@@ -620,6 +648,27 @@ export class RunManager {
           }
 
           acc.addPass(runnable, skipped, executed, verified);
+
+          // What was learned or confirmed on this pass (verified successes only; personal values never enter the memory).
+          if (this.deps.learning) {
+            const events: LearnEvent[] = [];
+            for (const p of runnable) {
+              const fp = p.fingerprint;
+              if (!fp) continue;
+              const ok = verified.find((v) => v.fieldId === p.fieldId)?.verified === true;
+              const lmId = learnedMapUsed.get(fp);
+              const liId = learnedInputUsed.get(fp);
+              if (lmId) events.push({ type: ok ? "used_ok" : "used_failed", id: lmId });
+              if (liId) events.push({ type: ok ? "used_ok" : "used_failed", id: liId });
+              if (!ok) continue;
+              const am = aiMapped.get(fp);
+              if (am && !lmId) events.push({ type: "verified", kind: "field_mapping", host: hints.host, structure: hints.structure, pattern: fingerprintHash(fp), value: { semanticType: am.semanticType, profileKey: am.profileKey } });
+              if (p.strategy === "keyboard" && !liId) events.push({ type: "verified", kind: "input_strategy", host: hints.host, structure: hints.structure, pattern: fingerprintHash(fp), value: { inputStrategy: "keyboard" } });
+            }
+            // one outcome per learned strategy per pass; a field re-planned in a later pass reports again then
+            await this.deps.learning.record(events).catch(() => undefined);
+            for (const p of runnable) if (p.fingerprint) { learnedMapUsed.delete(p.fingerprint); learnedInputUsed.delete(p.fingerprint); }
+          }
           for (const p of runnable) {
             const ok = verified.find((v) => v.fieldId === p.fieldId)?.verified === true;
             if (!ok) {
