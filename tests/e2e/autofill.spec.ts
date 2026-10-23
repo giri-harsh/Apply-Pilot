@@ -27,11 +27,13 @@ async function run(name: string, profile: UserProfile = testProfile()) {
   ext.context.on("request", (r) => {
     if (/^https?:/.test(r.url())) requests.push(r.url());
   });
-  const resourcesBefore = await page.evaluate(() => performance.getEntriesByType("resource").length);
+  // Counted by name, ignoring the favicon: the browser may add its own entry at any moment (same fragility as the request monitor test).
+  const resourceCount = () => page.evaluate(() => performance.getEntriesByType("resource").filter((e) => !e.name.endsWith("/favicon.ico")).length);
+  const resourcesBefore = await resourceCount();
   await popup.getByTestId("quick-apply").click();
   await waitForState(popup, ["READY_FOR_REVIEW", "BLOCKED", "FAILED", "PARTIALLY_COMPLETED"]);
   const record = (await popup.evaluate(async (id) => (await chrome.runtime.sendMessage({ kind: "GET_RUN", tabId: id })).run, tabId)) as RunRecord;
-  const resourcesAfter = await page.evaluate(() => performance.getEntriesByType("resource").length);
+  const resourcesAfter = await resourceCount();
   return { page, popup, record, report: record.report!, requests, newResources: resourcesAfter - resourcesBefore };
 }
 
