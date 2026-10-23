@@ -7,6 +7,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:e2e": "node scripts/build.mjs --e2e",
+    "captures:summarize": "node scripts/captures-summarize.mjs",
     "build:portals": "node scripts/build-portals.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

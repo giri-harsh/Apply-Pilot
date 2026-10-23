@@ -9,3 +9,7 @@ playwright-report
 .claude/settings.local.json
 *.log
 release
+
+# real-portal captures stay local (redacted or not); the folder README is tracked
+captures/*
+!captures/README.md
