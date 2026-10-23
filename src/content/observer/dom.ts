@@ -11,7 +11,7 @@ export function textWithoutControls(node: Element): string {
   return normalizeText(clone.textContent);
 }
 
-function documentHasLayout(doc: Document): boolean {
+export function documentHasLayout(doc: Document): boolean {
   const b = doc.body?.getBoundingClientRect();
   const h = doc.documentElement.getBoundingClientRect();
   return (b?.height ?? 0) > 0 || h.height > 0;

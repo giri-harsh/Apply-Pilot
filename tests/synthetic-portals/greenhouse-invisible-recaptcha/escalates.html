@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Job Application for Engineer at Acme Robotics</title></head>
+<body>
+<main>
+  <h1>Engineer</h1>
+  <div id="form-root"></div>
+</main>
+<div class="grecaptcha-badge" style="width:256px;height:60px;position:fixed;bottom:14px;right:-186px"><iframe title="reCAPTCHA" width="256" height="60" src="/recaptcha/enterprise/anchor?size=invisible"></iframe></div>
+<iframe src="/recaptcha/enterprise/bframe?hl=en" title="recaptcha challenge" style="width:0;height:0;border:0;position:absolute"></iframe>
+<script src="/_common.js"></script>
+<script src="/greenhouse-invisible-recaptcha/_form.js"></script>
+<script>
+  // Invisible reCAPTCHA escalates: after the first thing is typed, the challenge frame becomes visible and large.
+  var shown = false;
+  document.addEventListener("input", function () {
+    if (shown) return;
+    shown = true;
+    var f = document.querySelector("iframe[src*='bframe']");
+    f.style.cssText = "position:fixed;top:80px;left:20px;width:400px;height:480px;border:1px solid #888;background:#fff;z-index:50";
+    f.setAttribute("width", "400");
+    f.setAttribute("height", "480");
+  }, true);
+</script>
+</body></html>

@@ -71,12 +71,18 @@ export function classifyField(signals: Signal[], control: ControlKind, sectionCo
   const candidates = Array.from(new Set(hits.map((h) => h.type)));
   let ambiguous = false;
   let reason: string | null = null;
-  if (distinct.length > 1) {
+  let winner = best;
+  // "Preferred First Name" is the preferred-name field, not a conflict between first name and preferred name: the word
+  // "preferred" qualifies the name it sits in. Only this narrow family is resolved; any other disagreement stays ambiguous.
+  const preferred = authoritative.find((h) => h.type === "preferred_name");
+  const nameFamily = distinct.length > 1 && distinct.every((t) => t === "preferred_name" || t === "first_name" || t === "full_name");
+  if (nameFamily && preferred) winner = preferred;
+  else if (distinct.length > 1) {
     ambiguous = true;
     reason = `Conflicting signals: ${distinct.join(" vs ")}`;
   }
 
-  let type = best.type;
+  let type = winner.type;
   // Applicant-identity fields inside a reference / emergency-contact section belong to someone else.
   if (THIRD_PARTY_SECTION.test(sectionContext) && !SENSITIVE_TYPES.includes(type) && type !== "consent") {
     type = "third_party_contact";

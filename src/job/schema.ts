@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** Where a piece of job information came from, strongest first. */
-export const JOB_SOURCES = ["json_ld", "microdata", "heading", "page_selector", "document_title", "open_graph", "main_content", "text_pattern"] as const;
+export const JOB_SOURCES = ["json_ld", "microdata", "heading", "page_selector", "document_title", "open_graph", "main_content", "text_pattern", "url_slug"] as const;
 export type JobSource = (typeof JOB_SOURCES)[number];
 
 const list = (max = 30, len = 300) => z.array(z.string().max(len)).max(max);

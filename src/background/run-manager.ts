@@ -410,6 +410,12 @@ export class RunManager {
         let stepFields = 0;
         let lastFields: FormField[] = [];
         let uploadDone = false;
+        /** The first blocker on the page now (CAPTCHA, MFA, login), or null. Read-only; used after the first observation of a step. */
+        const recheckBlocker = async () => (await this.expect(runId, tabId, { kind: "DETECT_BLOCKERS" }, "BLOCKERS")).blockers[0] ?? null;
+        const escalationReason = (detail: string) => {
+          const n = acc.counts().verified;
+          return `${detail}. It appeared during the run, after ${n} field(s) were filled and verified, so ApplyPilot paused and kept that progress. ApplyPilot never tries to get past this; complete it yourself and run Quick Apply again.`;
+        };
         /** Resume upload for the file inputs of the latest observation. Returns true when the page recognised a file. */
         const runUpload = async (fileFields: FormField[]): Promise<boolean> => {
           this.assertActive(runId, tabId);
@@ -688,6 +694,10 @@ export class RunManager {
           counters = { actions: counters.actions + executed.filter((e) => e.executed).length, retries: counters.retries + retrying, passes: counters.passes + 1, transitions: counters.transitions };
           await saveCounters();
 
+          // ---- invisible reCAPTCHA can escalate to a visible challenge partway through: look again after every pass
+          const esc = await recheckBlocker();
+          if (esc) return await blockedWith(escalationReason(esc.detail), stepRecord("blocked", null, esc.type));
+
           // ---- let the page settle (debounced mutation observer in the page), then decide whether another pass is needed
           if (runnable.length > 0) await this.expect(runId, tabId, { kind: "WAIT_STABLE", quietMs: L.settleQuietMs, maxMs: L.settleMaxMs }, "STABLE");
           const retryable = runnable.some((p) => (attempts.get(failureKey(p)) ?? 0) > 0 && (attempts.get(failureKey(p)) ?? 0) <= L.maxRecoveryAttempts + 1 && !verified.find((v) => v.fieldId === p.fieldId)?.verified);
@@ -722,6 +732,10 @@ export class RunManager {
           addNote(note);
           return await finishWith(frameWarning ? "PARTIALLY_COMPLETED" : "READY_FOR_REVIEW", stepRecord("stopped", null, note));
         }
+
+        // ------------------------------------------------------------------ before any navigation: has a challenge appeared?
+        const beforeNext = await recheckBlocker();
+        if (beforeNext) return await blockedWith(escalationReason(beforeNext.detail), stepRecord("blocked", null, beforeNext.type));
 
         // ------------------------------------------------------------------ next-step detection by context (SPEC 15.1)
         const ctl = await this.expect(runId, tabId, { kind: "CLASSIFY_CONTROLS" }, "CONTROLS");

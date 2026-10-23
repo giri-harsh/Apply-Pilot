@@ -54,12 +54,21 @@ export function optionElements(box: HTMLElement | null, onlyVisible: boolean): H
   return Array.from(box.querySelectorAll<HTMLElement>("[role=option]")).filter((o) => !onlyVisible || isVisible(o));
 }
 
-export const optionText = (o: Element): string => normalizeText(o.textContent);
+export const optionText = (o: Element): string => {
+  // intl-tel-input rows hold the country name and the dial code in separate spans: the option's label is the name alone.
+  const name = o.querySelector(".iti__country-name");
+  return normalizeText(name ? name.textContent : o.textContent);
+};
 
 const PLACEHOLDER = /^(select|choose|pick|please|--|—|…|\.\.\.|none|no selection|search|type)\b/i;
 
 /** What the control currently shows as its value; "" when it shows only placeholder text. */
 export function displayedValue(el: HTMLElement): string {
+  // intl-tel-input shows a flag and a dial code; the chosen country is in the button's title ("India: +91").
+  if (el.classList.contains("iti__selected-country")) {
+    const t = (el.getAttribute("title") ?? "").split(":")[0]!.trim();
+    return /^select/i.test(t) ? "" : t;
+  }
   const raw = el.tagName === "INPUT" ? (el as HTMLInputElement).value : normalizeText(el.textContent);
   const v = raw.trim();
   return !v || PLACEHOLDER.test(v) ? "" : v;

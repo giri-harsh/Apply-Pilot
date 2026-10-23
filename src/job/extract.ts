@@ -11,6 +11,7 @@ import {
   type EmploymentType,
 } from "./sections";
 import { extractSkills } from "./skills";
+import { companyFromSlug, companyFromTitle } from "./company";
 
 export type ExtractOptions = { maxChars: number };
 export const DEFAULT_EXTRACT_OPTIONS: ExtractOptions = { maxChars: 12_000 };
@@ -290,6 +291,25 @@ export function extractJob(doc: Document, url: string, options: ExtractOptions =
     }
   }
   if (!company) {
+    const site = str(doc.querySelector('meta[property="og:site_name"]')?.getAttribute("content"));
+    if (site && !genericSegment(site) && !/\b(greenhouse|lever|ashby|workable|smartrecruiters|linkedin|indeed|glassdoor)\b/i.test(site)) {
+      company = site;
+      sources.company = "open_graph";
+      conf.company = 0.5;
+      warnings.push("Company taken from the site name; it may be the job board, not the employer");
+    }
+  }
+  if (!company) {
+    // "Job Application for <role> at <Company>": the LAST " at " (a role title can contain one).
+    const c = companyFromTitle(ogTitle || docTitle);
+    if (c) {
+      company = c;
+      sources.company = "document_title";
+      conf.company = 0.6;
+      warnings.push("Company inferred from the page title");
+    }
+  }
+  if (!company) {
     const parts = (ogTitle || docTitle).split(/\s+[|·•–—-]\s+|\s+at\s+/).map((p) => p.trim()).filter(Boolean);
     const rest = parts.filter((p) => !(title && similar(p, title) >= 0.8) && !genericSegment(p) && p.length >= 2 && p.length <= 60);
     if (rest.length > 0 && parts.length > 1) {
@@ -300,12 +320,12 @@ export function extractJob(doc: Document, url: string, options: ExtractOptions =
     }
   }
   if (!company) {
-    const site = str(doc.querySelector('meta[property="og:site_name"]')?.getAttribute("content"));
-    if (site && !genericSegment(site)) {
-      company = site;
-      sources.company = "open_graph";
-      conf.company = 0.3;
-      warnings.push("Company taken from the site name; it may be the job board, not the employer");
+    const slug = companyFromSlug(url);
+    if (slug) {
+      company = slug;
+      sources.company = "url_slug";
+      conf.company = 0.2;
+      warnings.push("Company guessed from the job board address (low confidence)");
     }
   }
 

@@ -16,7 +16,7 @@ export default tseslint.config(
     languageOptions: { globals: { console: "readonly", process: "readonly" } },
   },
   {
-    files: ["tests/synthetic-portals/*.js"],
+    files: ["tests/synthetic-portals/*.js", "tests/synthetic-portals/**/*.js"],
     languageOptions: { globals: { window: "readonly", document: "readonly", Element: "readonly" } },
   },
 );

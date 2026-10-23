@@ -37,6 +37,8 @@ type PageOpts = {
   navigateNoChange?: boolean;
   /** NAVIGATE refuses. */
   navigateRefused?: boolean;
+  /** After the first fill a CAPTCHA challenge appears (invisible reCAPTCHA escalating). */
+  blockAfterFill?: boolean;
   /** Fields that reveal one more field every time they are observed (never converges). */
   endlessFields?: boolean;
 };
@@ -92,7 +94,13 @@ class FakePage {
         return { ok: true, kind: "OBSERVED", url: `http://x.test/step${this.step}`, pageTitle: `Step ${this.step + 1}`, fields: d2.map((d, i) => this.fieldOf(d, i)) };
       }
       case "DETECT_BLOCKERS":
-        return { ok: true, kind: "BLOCKERS", blockers: this.opts.blockers ?? [], frames: this.opts.frames ?? [] };
+        return {
+          ok: true,
+          kind: "BLOCKERS",
+          // an invisible CAPTCHA that escalates to a visible challenge once something has been filled
+          blockers: this.opts.blockAfterFill && this.executeBatches.length > 0 ? [{ type: "captcha", detail: "A CAPTCHA or human-verification check is on this page" }] : (this.opts.blockers ?? []),
+          frames: this.opts.frames ?? [],
+        };
       case "MAP": {
         const plan: PlannedFill[] = [];
         const skipped: FieldResult[] = [];
@@ -467,6 +475,19 @@ describe("RunManager: blockers, frames and navigation", () => {
     expect(run.reason).toMatch(/never tries to get past/);
     expect(page.executeBatches).toHaveLength(0);
     expect(page.filled.size).toBe(0);
+  });
+
+  it("a challenge that appears after the first fill pauses the run cleanly: nothing more is done, progress and the reason are kept", async () => {
+    const page = new FakePage({ steps: [{ fields: [email, { key: "city", label: "City", type: "city" }], next: "Next" }, { fields: [] }], blockAfterFill: true });
+    const { mgr } = setup(page);
+    await mgr.start(1);
+    await until(mgr, 1, final);
+    const run = (await mgr.get(1))!;
+    expect(run.state).toBe("BLOCKED");
+    expect(run.reason).toMatch(/CAPTCHA.*appeared during the run, after 2 field\(s\) were filled and verified/);
+    expect(run.report).toMatchObject({ verified: 2, failed: 0 });
+    expect(page.navigateCalls).toBe(0); // never clicks Next once a challenge is up
+    expect(page.executeBatches).toHaveLength(1);
   });
 
   it("an unreadable embedded frame is reported and the run ends PARTIALLY_COMPLETED, never silent success", async () => {
