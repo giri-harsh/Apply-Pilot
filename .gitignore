@@ -4,6 +4,7 @@ dist-e2e
 dist-portals
 test-results
 playwright-report
+coverage
 .env*
 !.env.example
 .claude/settings.local.json
