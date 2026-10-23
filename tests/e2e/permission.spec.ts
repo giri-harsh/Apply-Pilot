@@ -75,7 +75,8 @@ test.describe("Step A: per-origin optional host permission", () => {
   });
 
   test("clicking Allow requests exactly one origin; what the browser answers decides, and the run resumes only after a grant", async () => {
-    const { page, popup, tabId } = await runPortal(ext, "crossorigin-1");
+    const { page, popup, tabId, record } = await runPortal(ext, "crossorigin-1");
+    expect(record, JSON.stringify({ s: record.state, r: record.reason, n: record.notes, np: record.needsPermission })).toMatchObject({ state: "BLOCKED", needsPermission: true });
     await popup.goto(`chrome-extension://${ext.extensionId}/popup.html?targetTabId=${tabId}&grantOrigin=${encodeURIComponent(new URL(page.url()).origin)}`);
     // Record the exact payload handed to chrome.permissions.request, and answer "granted" or "denied" ourselves
     // (the real Chrome confirmation bubble cannot be clicked from automation: see PROGRESS.md, Needs user verification).
