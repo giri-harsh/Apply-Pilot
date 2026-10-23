@@ -8,7 +8,7 @@ import {
   type BackgroundResponse,
 } from "@/shared/messages";
 import { RUNS_STORAGE_KEY, type RunRecord } from "@/shared/run";
-import type { AiStatus } from "@/shared/messages";
+import { safeMessage, type AiStatus } from "@/shared/messages";
 import type { JobSummary } from "@/job/schema";
 import { STATE_LABELS, isWorking } from "@/shared/state-machine";
 import { PROFILE_STORAGE_KEY, loadProfile } from "@/shared/storage";
@@ -78,8 +78,21 @@ function Popup() {
   const [saved, setSaved] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(async (id: number) => {
-    const r = await send({ kind: "GET_RUN", tabId: id });
-    if (r.ok && "run" in r) setRun(r.run);
+    // A service worker that is still waking can drop the first message; without a retry the popup would stay on its
+    // empty state until some unrelated storage change. Bounded: a worker that never answers is reported, not retried forever.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const r = await send({ kind: "GET_RUN", tabId: id });
+        if (r.ok && "run" in r) setRun(r.run);
+        return;
+      } catch (e) {
+        if (attempt >= 4) {
+          setError(safeMessage(e));
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+      }
+    }
   }, []);
 
   const refreshAi = useCallback(async () => {

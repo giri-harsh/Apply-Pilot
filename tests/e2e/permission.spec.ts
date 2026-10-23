@@ -34,6 +34,18 @@ test.describe("Step A: per-origin optional host permission", () => {
     expect(await getRunRecord(popup, tabId)).toMatchObject({ state: "BLOCKED" });
   });
 
+  test("a popup whose first run lookups are dropped (worker still waking) still shows the Allow button", async () => {
+    const { page, popup, tabId } = await runPortal(ext, "crossorigin-1");
+    await popup.addInitScript(() => {
+      const real = chrome.runtime.sendMessage.bind(chrome.runtime);
+      let dropped = 0;
+      (chrome.runtime as unknown as { sendMessage: unknown }).sendMessage = (m: { kind?: string }) =>
+        m?.kind === "GET_RUN" && dropped++ < 2 ? Promise.reject(new Error("Receiving end does not exist")) : real(m);
+    });
+    await popup.goto(`chrome-extension://${ext.extensionId}/popup.html?targetTabId=${tabId}&grantOrigin=${encodeURIComponent(new URL(page.url()).origin)}`);
+    await expect(popup.getByTestId("allow-site")).toBeVisible();
+  });
+
   test("the manifest asks for nothing at install and the production build lists only the two API hosts", () => {
     for (const dir of ["dist", "dist-e2e"]) {
       const m = JSON.parse(fs.readFileSync(path.join(root, dir, "manifest.json"), "utf8"));
