@@ -116,3 +116,7 @@ Session 4, Phase 7 (builder B3; budget 4 real calls, all Groq `openai/gpt-oss-20
 
 ## Needs user config
 - Nothing for Phases 0-3. API keys (Gemini/Groq) and a real profile JSON are needed from Phase 4 on.
+
+- Real-portal fix (Greenhouse): invisible reCAPTCHA no longer blocks (only interactive challenges do, re-checked after every pass and before navigation); company fallbacks (JSON-LD, og:site_name, title " at ", board slug); preferred-name and intl-tel-input country handling. See DECISIONS.md.
+- Popup run lookup: `GET_RUN` is retried (bounded, 4 retries) when the worker drops the first message; e2e "a popup whose first run lookups are dropped…" fails without the fix and passes with it. Suspected cause of one `permission.spec.ts` "clicking Allow" failure (allow-site never rendered); that failure itself was never reproduced (60 runs at 4 workers, 180 isolated runs after the fix: green), so this is a plausible, not proven, root cause. Monitored.
+- Capture intake: `pnpm captures:summarize` reads `captures/*.json` (git-ignored except README.md), refuses files that fail an email/URL-query/phone/long-text re-scan, writes `captures/SUMMARY.md`. Unit: `captures-summarize.test.ts`.

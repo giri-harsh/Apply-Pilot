@@ -1,9 +1,10 @@
 # Handoff
 
-All queued work is merged into `main`: M1-M4 (phase-7b, phase-8-prep, phase-11a) and Q1-Q4 (phase-8a, phase-8b, phase-11b, phase-11c).
+Everything is merged into `main` (Greenhouse invisible-reCAPTCHA fix, company fallbacks, popup run-lookup retry, capture intake).
 
-Verified on the final tree: typecheck, lint, 826 unit tests, production build, and 176 e2e tests on three consecutive full runs; `pnpm metrics` 47/47 and 37/37.
+Verified on the final tree: typecheck, lint, 858 unit tests, production build, and 184 e2e tests on three consecutive full runs.
 
 ## Next
-- Phase 8 real adapters need the user's real-portal captures (Popup > Capture this page; Settings > Diagnostics > export).
+- Phase 8 real adapters: drop exported captures in `captures/` (git-ignored), run `pnpm captures:summarize`, share `captures/SUMMARY.md`. Files that fail the redaction re-scan are listed and never summarized.
 - Phase 11 stays PARTIAL until the manual real-Chrome checks in PROGRESS.md are done.
+- Watch: `permission.spec.ts` "clicking Allow" failed once in a full run. Cause not reproduced; the popup run-lookup race (fixed, own test) is the best explanation; the test prints the run record if it recurs.
