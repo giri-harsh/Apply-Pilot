@@ -25,8 +25,23 @@ export function portalUrlOnHost(host: string, name: string): string {
   return `http://${host}:${new URL(base).port}/${name}.html`;
 }
 
+// Every browser profile is a few hundred files; left behind they pile up in %TEMP% run after run. Tests may relaunch on the
+// same directory after closing a context, so profiles are removed when the worker exits, not at context close.
+const created: string[] = [];
+process.on("exit", () => {
+  for (const dir of created) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    } catch {
+      // best effort: a profile still locked at exit is not worth failing a run
+    }
+  }
+});
+
 export function freshUserDataDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "applypilot-pw-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "applypilot-pw-"));
+  created.push(dir);
+  return dir;
 }
 
 /**
